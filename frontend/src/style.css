@@ -36,6 +36,11 @@ button {
   font: inherit;
 }
 
+button:focus-visible {
+  outline: 2px solid rgba(40, 94, 97, 0.42);
+  outline-offset: 2px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -54,6 +59,7 @@ button {
   border-right: 1px solid var(--border);
   background: rgba(251, 248, 242, 0.84);
   backdrop-filter: blur(14px);
+  transition: transform 180ms ease, opacity 180ms ease, visibility 180ms ease;
 }
 
 .sidebar__header h1,
@@ -150,6 +156,14 @@ button {
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
+}
+
+.toolbar__button--ghost {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.toolbar__button--sidebar {
+  display: none;
 }
 
 .toolbar__button--primary {
@@ -325,8 +339,35 @@ button {
   }
 
   .sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 20;
+    width: min(360px, calc(100vw - 32px));
+    height: 100vh;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
+    box-shadow: var(--shadow);
+    transform: translateX(-104%);
+    opacity: 0;
+    visibility: hidden;
+    overflow: auto;
+  }
+
+  body.sidebar-open {
+    overflow: hidden;
+  }
+
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .toolbar__button--sidebar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 }
 

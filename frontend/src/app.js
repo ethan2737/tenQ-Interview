@@ -5,6 +5,7 @@ const state = {
   result: null,
   selectedIndex: -1,
   sourcesOpen: false,
+  mobileSidebarOpen: false,
   error: "",
   phase: "idle",
   previewCache: {},
@@ -15,6 +16,7 @@ const elements = {
   list: document.getElementById("document-list"),
   sidebarStatus: document.getElementById("sidebar-status"),
   toolbarMeta: document.getElementById("toolbar-meta"),
+  sidebarToggleButton: document.getElementById("sidebar-toggle-button"),
   heroPanel: document.getElementById("hero-panel"),
   summaryPanel: document.getElementById("summary-panel"),
   detailPanel: document.getElementById("detail-panel"),
@@ -81,6 +83,10 @@ const api = {
 };
 
 function setupEvents() {
+  elements.sidebarToggleButton.addEventListener("click", () => {
+    state.mobileSidebarOpen = !state.mobileSidebarOpen;
+    render();
+  });
   elements.importFileButton.addEventListener("click", () => startPreview("file"));
   elements.importDirectoryButton.addEventListener("click", () => startPreview("directory"));
   elements.heroImportFile.addEventListener("click", () => startPreview("file"));
@@ -106,11 +112,24 @@ function setupEvents() {
       event.preventDefault();
       void selectDocument(Math.max(state.selectedIndex - 1, 0));
     }
-    if (event.key === "Escape" && state.sourcesOpen) {
-      state.sourcesOpen = false;
-      render();
+    if (event.key === "Escape") {
+      let shouldRender = false;
+      if (state.sourcesOpen) {
+        state.sourcesOpen = false;
+        shouldRender = true;
+      }
+      if (state.mobileSidebarOpen) {
+        state.mobileSidebarOpen = false;
+        shouldRender = true;
+      }
+      if (shouldRender) {
+        render();
+      }
     }
   });
+
+  window.addEventListener("resize", syncResponsiveState);
+  syncResponsiveState();
 }
 
 async function startPreview(type) {
@@ -302,6 +321,9 @@ async function selectDocument(index) {
   }
   state.selectedIndex = index;
   state.sourcesOpen = false;
+  if (window.innerWidth <= 1100) {
+    state.mobileSidebarOpen = false;
+  }
 
   if (state.phase === "preview") {
     const selected = state.result.documents[index];
@@ -324,9 +346,14 @@ async function selectDocument(index) {
 function render() {
   const hasResult = Boolean(state.result);
   const selected = getSelectedDocument();
+  const mobileSidebarActive = state.mobileSidebarOpen && window.innerWidth <= 1100;
 
   elements.toolbarMeta.textContent = state.error || toolbarText();
   elements.sidebarStatus.textContent = buildSidebarStatus();
+  document.body.classList.toggle("sidebar-open", mobileSidebarActive);
+  elements.sidebarToggleButton.classList.toggle("hidden", window.innerWidth > 1100);
+  elements.sidebarToggleButton.setAttribute("aria-expanded", String(mobileSidebarActive));
+  elements.sidebarToggleButton.textContent = mobileSidebarActive ? "收起目录" : "文档目录";
 
   toggleBusyState(state.busy);
   renderList();
@@ -634,6 +661,7 @@ function saveConfirmedPreviewKeys() {
 
 function toggleBusyState(isBusy) {
   [
+    elements.sidebarToggleButton,
     elements.importFileButton,
     elements.importDirectoryButton,
     elements.heroImportFile,
@@ -667,6 +695,13 @@ function statusLabel(status, path = "") {
     default:
       return "未开始";
   }
+}
+
+function syncResponsiveState() {
+  if (window.innerWidth > 1100 && state.mobileSidebarOpen) {
+    state.mobileSidebarOpen = false;
+  }
+  render();
 }
 
 function mockPrepareResult(target) {
