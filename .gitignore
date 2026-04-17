@@ -14,3 +14,6 @@ frontend/wailsjs/
 
 # local reports
 coverage.out
+
+# local agent instructions
+AGENTS.md
