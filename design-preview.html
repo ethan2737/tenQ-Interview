@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TenQ Interview Design Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700&family=Source+Han+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --surface: #fbf8f2;
+      --surface-2: #f1ebdf;
+      --line: #d9d2c3;
+      --text: #1f2933;
+      --muted: #667085;
+      --primary: #285e61;
+      --secondary: #c08a3e;
+      --success: #3e7c59;
+      --warning: #b7791f;
+      --error: #b2544f;
+      --shadow: rgba(31, 41, 51, 0.08);
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 16px;
+      --space-4: 24px;
+      --space-5: 32px;
+      --space-6: 48px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --font-display: "Noto Serif SC", serif;
+      --font-body: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "JetBrains Mono", monospace;
+    }
+
+    body.dark {
+      --bg: #1b1f1f;
+      --surface: #232a29;
+      --surface-2: #28312f;
+      --line: #38433f;
+      --text: #edf1ee;
+      --muted: #a6b0ac;
+      --primary: #72a7a7;
+      --secondary: #d0a05f;
+      --success: #82b68f;
+      --warning: #d3a45c;
+      --error: #d07a72;
+      --shadow: rgba(0, 0, 0, 0.22);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      background:
+        radial-gradient(circle at top left, rgba(192, 138, 62, 0.08), transparent 30%),
+        linear-gradient(180deg, var(--bg), #efe9dc);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: var(--space-5);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: var(--space-5);
+      align-items: start;
+      margin-bottom: var(--space-6);
+    }
+
+    .eyebrow,
+    .meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .hero h1,
+    .section h2,
+    .mockup h3,
+    .question {
+      font-family: var(--font-display);
+      margin: 0;
+    }
+
+    .hero h1 {
+      font-size: clamp(36px, 5vw, 64px);
+      line-height: 1.08;
+      margin-top: var(--space-2);
+      margin-bottom: var(--space-3);
+    }
+
+    .hero p {
+      font-size: 18px;
+      line-height: 1.8;
+      color: var(--text);
+      max-width: 60ch;
+      margin: 0 0 var(--space-4);
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 12px 18px;
+      font-weight: 600;
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    }
+
+    .btn.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #f7f9f8;
+    }
+
+    .btn.ghost:hover,
+    .btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .btn.primary:hover {
+      background: #214f52;
+      color: #fff;
+    }
+
+    .hero-panel,
+    .section,
+    .mockup,
+    .palette-grid > div,
+    .type-sample,
+    .mini-card {
+      background: rgba(251, 248, 242, 0.72);
+      backdrop-filter: blur(4px);
+      border: 1px solid var(--line);
+      box-shadow: 0 14px 36px var(--shadow);
+    }
+
+    .hero-panel {
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+    }
+
+    .hero-panel .reading-sheet {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+    }
+
+    .reading-sheet .question {
+      font-size: 28px;
+      line-height: 1.35;
+      margin-bottom: var(--space-3);
+    }
+
+    .answer {
+      font-size: 17px;
+      line-height: 1.85;
+      margin-bottom: var(--space-3);
+    }
+
+    .trust {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: 14px;
+      color: var(--primary);
+      background: rgba(40, 94, 97, 0.08);
+      border-radius: 999px;
+      padding: 8px 12px;
+      margin-bottom: var(--space-3);
+    }
+
+    .section {
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      margin-bottom: var(--space-5);
+    }
+
+    .section h2 {
+      font-size: 28px;
+      margin-bottom: var(--space-2);
+    }
+
+    .section-intro {
+      color: var(--muted);
+      line-height: 1.8;
+      margin-bottom: var(--space-4);
+      max-width: 70ch;
+    }
+
+    .palette-grid,
+    .type-grid,
+    .component-grid {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .palette-grid {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+
+    .palette-grid > div {
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .swatch {
+      height: 92px;
+    }
+
+    .swatch-meta {
+      padding: var(--space-3);
+    }
+
+    .swatch-meta strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .swatch-meta code,
+    .meta-block code {
+      font-family: var(--font-mono);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .type-grid {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .type-sample {
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+    }
+
+    .type-sample h3 {
+      font-size: 13px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin: 0 0 var(--space-3);
+    }
+
+    .display-sample {
+      font-family: var(--font-display);
+      font-size: 32px;
+      line-height: 1.3;
+    }
+
+    .body-sample {
+      font-size: 16px;
+      line-height: 1.85;
+    }
+
+    .mono-sample {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .component-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .mini-card {
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+    }
+
+    .mockup {
+      border-radius: 22px;
+      overflow: hidden;
+      background: var(--surface);
+      margin-bottom: var(--space-4);
+    }
+
+    .app-frame {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      min-height: 640px;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(40, 94, 97, 0.06), rgba(40, 94, 97, 0.01));
+      padding: var(--space-4);
+    }
+
+    .sidebar h4,
+    .content h4 {
+      margin: 0 0 var(--space-3);
+      font-family: var(--font-display);
+      font-size: 22px;
+    }
+
+    .tree-group {
+      margin-bottom: var(--space-4);
+    }
+
+    .tree-group .label {
+      font-family: var(--font-mono);
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: var(--space-2);
+    }
+
+    .tree-item {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 6px;
+      font-size: 14px;
+      background: transparent;
+    }
+
+    .tree-item.active {
+      background: rgba(40, 94, 97, 0.1);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .content {
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-3);
+      border-bottom: 1px solid var(--line);
+      padding-bottom: var(--space-3);
+    }
+
+    .badge-row {
+      display: flex;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .badge.ok { color: var(--success); border-color: rgba(62, 124, 89, 0.3); }
+    .badge.warn { color: var(--warning); border-color: rgba(183, 121, 31, 0.3); }
+    .badge.err { color: var(--error); border-color: rgba(178, 84, 79, 0.3); }
+
+    .card-surface {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+    }
+
+    .card-surface p {
+      line-height: 1.85;
+      margin: 0;
+    }
+
+    .footnote {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+      margin-top: var(--space-3);
+    }
+
+    .toolbar {
+      display: flex;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+      margin-top: var(--space-3);
+    }
+
+    .token-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-3);
+      margin-top: var(--space-4);
+    }
+
+    .meta-block {
+      padding: var(--space-3);
+      background: var(--surface);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line);
+    }
+
+    @media (max-width: 980px) {
+      .hero { grid-template-columns: 1fr; }
+      .component-grid { grid-template-columns: 1fr; }
+      .app-frame { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Design System Preview</div>
+        <h1>TenQ Interview 应该像一张安静、可信、能让你立刻开始背题的工作台。</h1>
+        <p>
+          这不是通用学习平台，也不是文档管理器。它更像晨间书房里的复习台：
+          左边是你已经整理好的资料树，右边是可直接口述的标准答案。
+          颜色和排版的工作，不是“变好看”，而是让你更快进入状态、更敢相信题卡。
+        </p>
+        <div class="hero-actions">
+          <button class="btn primary">进入今天的复习</button>
+          <button class="btn ghost" id="theme-toggle">切换 Light / Dark</button>
+        </div>
+      </div>
+      <div class="hero-panel">
+        <div class="meta">Reading Surface Preview</div>
+        <div class="reading-sheet">
+          <div class="question">Go 的 GMP 模型是什么？</div>
+          <div class="trust">基于原文整理，可展开查看依据</div>
+          <div class="answer">
+            GMP 是 Go 的协程调度模型。G 表示 goroutine，M 表示真正执行代码的线程，P 表示运行所需的处理器上下文。
+            调度器会把大量 goroutine 挂到少量线程上执行，这样既能利用多核并发，也能避免线程数量失控带来的资源开销。
+          </div>
+          <div class="toolbar">
+            <button class="btn ghost">查看依据</button>
+            <button class="btn ghost">查看原文</button>
+            <button class="btn ghost">复制答案</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Typography</h2>
+      <p class="section-intro">
+        这套字体系的目标不是“时髦”，而是让题目有分量、正文耐读、元信息有工具感。衬线只用在该有分量的地方，
+        无衬线承担长文阅读，等宽字体只负责状态、快捷键和技术小信息。
+      </p>
+      <div class="type-grid">
+        <div class="type-sample">
+          <h3>Display / Question</h3>
+          <div class="display-sample">这个问题在真实面试里，应该怎么答。</div>
+          <p class="footnote">Noto Serif SC, 用在题目、空状态主标题、重点分区标题。</p>
+        </div>
+        <div class="type-sample">
+          <h3>Body / Reading</h3>
+          <div class="body-sample">
+            Source Han Sans SC 负责正文阅读。它不抢戏，但密度高的时候也不乱，适合长时间盯着题卡看。
+            这是这个产品最重要的一层字。
+          </div>
+          <p class="footnote">用在答案正文、按钮、树节点、状态说明。</p>
+        </div>
+        <div class="type-sample">
+          <h3>Mono / Utility</h3>
+          <div class="mono-sample">
+            ↑ / ↓ navigate<br>
+            esc close drawer<br>
+            parserVersion=1<br>
+            source: docs-go/gmp.md
+          </div>
+          <p class="footnote">JetBrains Mono, 只给元信息，不进入主要阅读面。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Color Palette</h2>
+      <p class="section-intro">
+        暖纸底色负责降低后台工具感，深青灰负责建立稳定锚点。赭金不是第二主色，只在需要轻微提气时出现。
+        这套颜色的目标不是抓眼球，而是建立可信和耐看。
+      </p>
+      <div class="palette-grid">
+        <div>
+          <div class="swatch" style="background:#285e61;"></div>
+          <div class="swatch-meta"><strong>Primary</strong><code>#285E61</code></div>
+        </div>
+        <div>
+          <div class="swatch" style="background:#c08a3e;"></div>
+          <div class="swatch-meta"><strong>Secondary Accent</strong><code>#C08A3E</code></div>
+        </div>
+        <div>
+          <div class="swatch" style="background:#f5f1e8;"></div>
+          <div class="swatch-meta"><strong>Canvas</strong><code>#F5F1E8</code></div>
+        </div>
+        <div>
+          <div class="swatch" style="background:#fbf8f2;"></div>
+          <div class="swatch-meta"><strong>Reading Surface</strong><code>#FBF8F2</code></div>
+        </div>
+        <div>
+          <div class="swatch" style="background:#1f2933;"></div>
+          <div class="swatch-meta"><strong>Ink</strong><code>#1F2933</code></div>
+        </div>
+        <div>
+          <div class="swatch" style="background:#d9d2c3;"></div>
+          <div class="swatch-meta"><strong>Line</strong><code>#D9D2C3</code></div>
+        </div>
+      </div>
+      <div class="token-list">
+        <div class="meta-block"><strong>Success</strong><br><code>#3E7C59</code></div>
+        <div class="meta-block"><strong>Warning</strong><br><code>#B7791F</code></div>
+        <div class="meta-block"><strong>Error</strong><br><code>#B2544F</code></div>
+        <div class="meta-block"><strong>Muted Text</strong><br><code>#667085</code></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Components & Tone</h2>
+      <p class="section-intro">
+        这里没有厚重卡片墙。组件存在是为了帮你开始、切题、确认和继续，不是为了把页面撑满。
+      </p>
+      <div class="component-grid">
+        <div class="mini-card">
+          <div class="meta">Morning Empty State</div>
+          <h3 style="font-family:var(--font-display);font-size:26px;margin:10px 0 12px;">开始今天的面试复习</h3>
+          <p class="footnote" style="margin:0 0 16px;">
+            导入文档后，系统会整理成可直接背诵的题卡。
+          </p>
+          <div class="toolbar">
+            <button class="btn primary">导入文档</button>
+            <button class="btn ghost">导入文件夹</button>
+          </div>
+        </div>
+        <div class="mini-card">
+          <div class="meta">Batch Progress</div>
+          <h3 style="font-family:var(--font-display);font-size:26px;margin:10px 0 16px;">资料正在整理中</h3>
+          <div class="badge-row">
+            <span class="badge ok">已完成 126</span>
+            <span class="badge">处理中 8</span>
+            <span class="badge err">失败 2</span>
+          </div>
+          <p class="footnote">
+            已完成的题卡可以立刻开始复习，不需要等全量处理完。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Realistic Product Mockup</h2>
+      <p class="section-intro">
+        这不是通用 dashboard。重点是让你一打开就知道去哪里、先做什么、背哪一题。
+      </p>
+      <div class="mockup">
+        <div class="app-frame">
+          <aside class="sidebar">
+            <div class="meta">Docs Tree</div>
+            <h4>Go 面试资料</h4>
+            <div class="tree-group">
+              <div class="label">并发与调度</div>
+              <div class="tree-item active">GMP 模型是什么</div>
+              <div class="tree-item">channel 的底层实现</div>
+              <div class="tree-item">context 常见误用</div>
+            </div>
+            <div class="tree-group">
+              <div class="label">锁与同步</div>
+              <div class="tree-item">Mutex 与 RWMutex 区别</div>
+              <div class="tree-item">sync.Map 适用场景</div>
+            </div>
+            <div class="tree-group">
+              <div class="label">状态</div>
+              <div class="tree-item">当前目录第 1 题</div>
+            </div>
+          </aside>
+          <main class="content">
+            <div class="topbar">
+              <div>
+                <div class="meta">Morning Review</div>
+                <h4>开始第一题</h4>
+              </div>
+              <div class="badge-row">
+                <span class="badge ok">ready</span>
+                <span class="badge">cache hit</span>
+              </div>
+            </div>
+            <div class="card-surface">
+              <div class="question" style="font-size:34px;margin-bottom:16px;">Go 的 GMP 模型是什么？</div>
+              <p>
+                GMP 是 Go 的协程调度模型。G 是 goroutine，M 是真正执行代码的线程，P 是调度所需的处理器上下文。
+                调度器把大量 goroutine 分配到少量线程上运行，这样既能利用多核并发，也能控制线程开销，避免线程数量无限膨胀。
+              </p>
+              <div class="trust" style="margin-top:24px;">基于原文整理，可展开查看依据</div>
+              <div class="toolbar">
+                <button class="btn ghost">查看依据</button>
+                <button class="btn ghost">查看原文片段</button>
+                <button class="btn ghost">复制答案</button>
+              </div>
+            </div>
+            <div class="card-surface">
+              <div class="meta">Failure State Example</div>
+              <div class="badge-row" style="margin:12px 0;">
+                <span class="badge err">parse failed</span>
+              </div>
+              <p>
+                这篇文档的标题结构不完整，暂时无法生成题卡。你可以重新预览原文，或稍后重试。
+              </p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+    const button = document.getElementById("theme-toggle");
+    button.addEventListener("click", () => {
+      document.body.classList.toggle("dark");
+    });
+  </script>
+</body>
+</html>
