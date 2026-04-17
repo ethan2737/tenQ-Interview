@@ -18,3 +18,4 @@ coverage.out
 # local agent instructions
 .gstack/
 AGENTS.md
+CLAUDE.md
