@@ -17,5 +17,6 @@ coverage.out
 
 # local agent instructions
 .gstack/
+.worktrees/
 AGENTS.md
 CLAUDE.md
