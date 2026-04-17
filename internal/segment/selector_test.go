@@ -21,3 +21,18 @@ func TestSelectCandidateSegmentsPrioritisesRelevantParagraphs(t *testing.T) {
 		t.Fatalf("expected first segment to be the highest-scoring one")
 	}
 }
+
+func TestSelectCandidateSegmentsPreservesFencedCodeBlocks(t *testing.T) {
+	t.Parallel()
+
+	body := "```go\nfmt.Println(\"hello\")\nfmt.Println(\"world\")\n```\n\n后续说明。"
+
+	segments := SelectCandidateSegments("打印示例", body, 1)
+	if len(segments) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(segments))
+	}
+
+	if segments[0].Text != "```go\nfmt.Println(\"hello\")\nfmt.Println(\"world\")\n```" {
+		t.Fatalf("expected code fence to be preserved, got %q", segments[0].Text)
+	}
+}

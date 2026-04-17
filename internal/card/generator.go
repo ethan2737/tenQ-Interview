@@ -28,7 +28,7 @@ func GenerateCard(question string, segments []segment.CandidateSegment) (Card, e
 	currentLen := 0
 
 	for _, item := range segments {
-		text := compactWhitespace(item.Text)
+		text := normalizeMarkdownBlock(item.Text)
 		if text == "" {
 			continue
 		}
@@ -36,15 +36,15 @@ func GenerateCard(question string, segments []segment.CandidateSegment) (Card, e
 		nextLen := currentLen + len([]rune(text))
 		if len(answerParts) == 0 || nextLen <= maxAnswerRunes {
 			answerParts = append(answerParts, text)
-			currentLen = len([]rune(strings.Join(answerParts, "")))
+			currentLen = len([]rune(strings.Join(answerParts, "\n\n")))
 		}
 	}
 
 	if len(answerParts) == 0 {
-		answerParts = append(answerParts, compactWhitespace(segments[0].Text))
+		answerParts = append(answerParts, normalizeMarkdownBlock(segments[0].Text))
 	}
 
-	answer := compactWhitespace(strings.Join(answerParts, ""))
+	answer := normalizeMarkdownBlock(strings.Join(answerParts, "\n\n"))
 	answer = trimToRunes(answer, maxAnswerRunes)
 	if answer == "" {
 		return Card{}, errors.New("generated answer is empty")
@@ -57,8 +57,27 @@ func GenerateCard(question string, segments []segment.CandidateSegment) (Card, e
 	}, nil
 }
 
-func compactWhitespace(input string) string {
-	return strings.Join(strings.Fields(input), " ")
+func normalizeMarkdownBlock(input string) string {
+	normalized := strings.ReplaceAll(input, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	cleaned := make([]string, 0, len(lines))
+	previousBlank := false
+
+	for _, line := range lines {
+		trimmedRight := strings.TrimRight(line, " \t")
+		if strings.TrimSpace(trimmedRight) == "" {
+			if previousBlank {
+				continue
+			}
+			previousBlank = true
+			cleaned = append(cleaned, "")
+			continue
+		}
+		previousBlank = false
+		cleaned = append(cleaned, trimmedRight)
+	}
+
+	return strings.TrimSpace(strings.Join(cleaned, "\n"))
 }
 
 func trimToRunes(input string, limit int) string {

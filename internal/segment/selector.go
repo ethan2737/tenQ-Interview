@@ -49,14 +49,37 @@ func SelectCandidateSegments(question string, body string, limit int) []Candidat
 }
 
 func splitParagraphs(body string) []string {
-	chunks := strings.Split(body, "\n\n")
-	paragraphs := make([]string, 0, len(chunks))
-	for _, chunk := range chunks {
-		trimmed := strings.TrimSpace(strings.ReplaceAll(chunk, "\n", " "))
-		if trimmed != "" {
-			paragraphs = append(paragraphs, trimmed)
+	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	paragraphs := make([]string, 0, len(lines))
+	current := make([]string, 0, 8)
+	inFence := false
+
+	flush := func() {
+		if len(current) == 0 {
+			return
 		}
+		paragraph := strings.TrimSpace(strings.Join(current, "\n"))
+		if paragraph != "" {
+			paragraphs = append(paragraphs, paragraph)
+		}
+		current = current[:0]
 	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			current = append(current, trimmed)
+			inFence = !inFence
+			continue
+		}
+		if !inFence && trimmed == "" {
+			flush()
+			continue
+		}
+		current = append(current, line)
+	}
+
+	flush()
 	return paragraphs
 }
 

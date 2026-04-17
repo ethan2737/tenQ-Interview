@@ -13,6 +13,7 @@ type ParsedDocument struct {
 }
 
 func ParseMarkdown(path string, markdown string) (ParsedDocument, error) {
+	markdown = strings.TrimPrefix(markdown, "\uFEFF")
 	lines := strings.Split(markdown, "\n")
 	title := ""
 	bodyStart := 0
@@ -21,6 +22,7 @@ func ParseMarkdown(path string, markdown string) (ParsedDocument, error) {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
 			title = strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			title = strings.TrimPrefix(title, "\uFEFF")
 			bodyStart = index + 1
 			break
 		}

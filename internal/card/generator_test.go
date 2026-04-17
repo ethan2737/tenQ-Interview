@@ -42,3 +42,33 @@ func TestGenerateCardBuildsBoundedAnswerFromSourceSegments(t *testing.T) {
 		t.Fatalf("expected card sources to be retained")
 	}
 }
+
+func TestGenerateCardPreservesMarkdownStructureInSourcesAndAnswer(t *testing.T) {
+	t.Parallel()
+
+	segments := []segment.CandidateSegment{
+		{
+			Text:  "```go\nfmt.Println(\"hello\")\n```",
+			Score: 5,
+		},
+		{
+			Text:  "![架构图](images/arch.png)",
+			Score: 4,
+		},
+	}
+
+	card, err := GenerateCard("示例", segments)
+	if err != nil {
+		t.Fatalf("GenerateCard returned error: %v", err)
+	}
+
+	if !strings.Contains(card.Answer, "```go\nfmt.Println(\"hello\")\n```") {
+		t.Fatalf("expected answer to preserve fenced code block, got %q", card.Answer)
+	}
+	if !strings.Contains(card.Answer, "![架构图](images/arch.png)") {
+		t.Fatalf("expected answer to preserve markdown image, got %q", card.Answer)
+	}
+	if card.Sources[0] != "```go\nfmt.Println(\"hello\")\n```" {
+		t.Fatalf("expected source to keep code fence, got %q", card.Sources[0])
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"tenq-interview/internal/cache"
 	"tenq-interview/internal/importer"
@@ -214,6 +215,53 @@ func (s *Service) PreviewDocument(path string) (DocumentPreview, error) {
 		SuspectedGarbled: suspected,
 		Warning:          warning,
 	}, nil
+}
+
+func (s *Service) ListImportedDocuments() (ImportResult, error) {
+	entries := s.store.List()
+	byPath := make(map[string]DocumentSummary, len(entries))
+
+	for _, entry := range entries {
+		byPath[entry.Path] = DocumentSummary{
+			Path:         entry.Path,
+			RelativePath: filepath.Base(entry.Path),
+			Title:        entry.Title,
+			Status:       StatusReady,
+			FromCache:    true,
+			Encoding:     entry.Encoding,
+			CardAnswer:   entry.CardAnswer,
+			SourceTexts:  entry.SourceTexts,
+			CacheKey:     entry.Key,
+		}
+	}
+
+	documents := make([]DocumentSummary, 0, len(byPath))
+	for _, document := range byPath {
+		documents = append(documents, document)
+	}
+
+	sort.Slice(documents, func(i int, j int) bool {
+		if documents[i].Title == documents[j].Title {
+			return documents[i].Path < documents[j].Path
+		}
+		return documents[i].Title < documents[j].Title
+	})
+
+	return ImportResult{
+		Target:    "累计导入",
+		Total:     len(documents),
+		Ready:     len(documents),
+		Failed:    0,
+		Documents: documents,
+	}, nil
+}
+
+func (s *Service) ClearImportedDocuments() error {
+	s.store.Clear()
+	if s.cachePath == "" {
+		return nil
+	}
+	return s.store.Save(s.cachePath)
 }
 
 func fingerprint(raw []byte) string {

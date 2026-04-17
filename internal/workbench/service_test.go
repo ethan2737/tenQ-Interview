@@ -277,3 +277,84 @@ func TestImportPathReusesPersistentCache(t *testing.T) {
 		t.Fatalf("expected second import to hit persistent cache")
 	}
 }
+
+func TestListImportedDocumentsRestoresCachedLibrary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	cachePath := filepath.Join(root, "cache.json")
+
+	firstPath := filepath.Join(root, "gmp.md")
+	secondPath := filepath.Join(root, "channel.md")
+	if err := os.WriteFile(firstPath, []byte("# GMP\n\nGMP 是 Go 的调度模型。"), 0o600); err != nil {
+		t.Fatalf("failed to write first fixture: %v", err)
+	}
+	if err := os.WriteFile(secondPath, []byte("# Channel\n\nChannel 用于协程通信。"), 0o600); err != nil {
+		t.Fatalf("failed to write second fixture: %v", err)
+	}
+
+	firstService, err := NewServiceWithCache(cachePath)
+	if err != nil {
+		t.Fatalf("NewServiceWithCache returned error: %v", err)
+	}
+	if _, err := firstService.ProcessDocument(firstPath, "gmp.md"); err != nil {
+		t.Fatalf("ProcessDocument firstPath returned error: %v", err)
+	}
+	if _, err := firstService.ProcessDocument(secondPath, "channel.md"); err != nil {
+		t.Fatalf("ProcessDocument secondPath returned error: %v", err)
+	}
+
+	secondService, err := NewServiceWithCache(cachePath)
+	if err != nil {
+		t.Fatalf("NewServiceWithCache returned error: %v", err)
+	}
+	result, err := secondService.ListImportedDocuments()
+	if err != nil {
+		t.Fatalf("ListImportedDocuments returned error: %v", err)
+	}
+
+	if result.Total != 2 || result.Ready != 2 || result.Failed != 0 {
+		t.Fatalf("unexpected counts: total=%d ready=%d failed=%d", result.Total, result.Ready, result.Failed)
+	}
+	if len(result.Documents) != 2 {
+		t.Fatalf("expected 2 restored documents, got %d", len(result.Documents))
+	}
+	if !result.Documents[0].FromCache || !result.Documents[1].FromCache {
+		t.Fatalf("expected restored documents to be marked from cache")
+	}
+}
+
+func TestClearImportedDocumentsRemovesPersistentLibrary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	cachePath := filepath.Join(root, "cache.json")
+	docPath := filepath.Join(root, "gmp.md")
+	if err := os.WriteFile(docPath, []byte("# GMP\n\nGMP 是 Go 的调度模型。"), 0o600); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+
+	firstService, err := NewServiceWithCache(cachePath)
+	if err != nil {
+		t.Fatalf("NewServiceWithCache returned error: %v", err)
+	}
+	if _, err := firstService.ProcessDocument(docPath, "gmp.md"); err != nil {
+		t.Fatalf("ProcessDocument returned error: %v", err)
+	}
+
+	if err := firstService.ClearImportedDocuments(); err != nil {
+		t.Fatalf("ClearImportedDocuments returned error: %v", err)
+	}
+
+	secondService, err := NewServiceWithCache(cachePath)
+	if err != nil {
+		t.Fatalf("NewServiceWithCache returned error: %v", err)
+	}
+	result, err := secondService.ListImportedDocuments()
+	if err != nil {
+		t.Fatalf("ListImportedDocuments returned error: %v", err)
+	}
+	if result.Total != 0 || len(result.Documents) != 0 {
+		t.Fatalf("expected cleared library to stay empty, got total=%d docs=%d", result.Total, len(result.Documents))
+	}
+}

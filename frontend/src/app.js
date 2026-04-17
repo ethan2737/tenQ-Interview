@@ -1,7 +1,13 @@
 const CONFIRMED_STORAGE_KEY = "tenq-interview.confirmed-preview-keys.v1";
+const {
+  buildLibraryResult: buildImportLibraryResult,
+  mergeImportedDocuments,
+} = window.TenQImportSession;
+const { renderMarkdownToHtml } = window.TenQMarkdownRender;
 
 const state = {
   busy: false,
+  libraryDocuments: [],
   result: null,
   selectedIndex: -1,
   sourcesOpen: false,
@@ -80,6 +86,18 @@ const api = {
     }
     return mockPreviewDocument(path);
   },
+  async listImportedDocuments() {
+    if (window.go?.main?.App?.ListImportedDocuments) {
+      return window.go.main.App.ListImportedDocuments();
+    }
+    return { target: "累计导入", total: 0, ready: 0, failed: 0, documents: [] };
+  },
+  async clearImportedDocuments() {
+    if (window.go?.main?.App?.ClearImportedDocuments) {
+      return window.go.main.App.ClearImportedDocuments();
+    }
+    return undefined;
+  },
 };
 
 function setupEvents() {
@@ -92,7 +110,9 @@ function setupEvents() {
   elements.heroImportFile.addEventListener("click", () => startPreview("file"));
   elements.heroImportDirectory.addEventListener("click", () => startPreview("directory"));
   elements.confirmImportButton.addEventListener("click", () => runImportQueue());
-  elements.cancelImportButton.addEventListener("click", () => resetImport());
+  elements.cancelImportButton.addEventListener("click", () => {
+    void resetImport();
+  });
   elements.retryDocumentButton.addEventListener("click", () => retrySelectedDocument());
   elements.confirmDocumentButton.addEventListener("click", () => toggleConfirmSelectedDocument());
   elements.sourceToggle.addEventListener("click", () => {
@@ -170,6 +190,28 @@ async function startPreview(type) {
   }
 }
 
+async function restoreImportedLibrary() {
+  try {
+    const restored = normalizeResult(await api.listImportedDocuments());
+    if (restored.documents.length === 0) {
+      return;
+    }
+
+    state.libraryDocuments = restored.documents.map((documentItem) => ({
+      ...documentItem,
+      sourceTexts: Array.isArray(documentItem.sourceTexts) ? [...documentItem.sourceTexts] : [],
+    }));
+    state.result = buildAccumulatedLibraryResult();
+    state.selectedIndex = state.result.documents.length > 0 ? 0 : -1;
+    state.phase = "done";
+    state.sourcesOpen = false;
+    render();
+  } catch (error) {
+    state.error = error?.message || String(error);
+    render();
+  }
+}
+
 async function warmPreviewCache() {
   if (!state.result) {
     return;
@@ -204,6 +246,7 @@ async function runImportQueue() {
       applyProcessedDocument(index, processed);
       render();
     }
+    commitImportedBatch();
     state.phase = "done";
   } catch (error) {
     state.error = error?.message || String(error);
@@ -294,14 +337,43 @@ function applyProcessedDocument(index, processed) {
   }
 }
 
-function resetImport() {
+async function resetImport() {
+  if (state.phase !== "preview") {
+    state.busy = true;
+    state.error = "";
+    render();
+
+    try {
+      await api.clearImportedDocuments();
+      state.libraryDocuments = [];
+      state.result = null;
+      state.selectedIndex = -1;
+      state.sourcesOpen = false;
+      state.phase = "idle";
+      state.previewCache = {};
+    } catch (error) {
+      state.error = error?.message || String(error);
+    } finally {
+      state.busy = false;
+      render();
+    }
+    return;
+  }
+
   state.busy = false;
-  state.result = null;
-  state.selectedIndex = -1;
   state.sourcesOpen = false;
   state.error = "";
-  state.phase = "idle";
   state.previewCache = {};
+  if (state.libraryDocuments.length > 0) {
+    state.result = buildAccumulatedLibraryResult();
+    state.selectedIndex = state.result.documents.length > 0 ? 0 : -1;
+    state.phase = "done";
+    render();
+    return;
+  }
+  state.result = null;
+  state.selectedIndex = -1;
+  state.phase = "idle";
   render();
 }
 
@@ -313,6 +385,29 @@ function normalizeResult(result) {
     failed: result.failed || 0,
     documents: Array.isArray(result.documents) ? result.documents : [],
   };
+}
+
+function commitImportedBatch() {
+  if (!state.result) {
+    return;
+  }
+
+  const selectedPath = getSelectedDocument()?.path || "";
+  const merged = mergeImportedDocuments(state.libraryDocuments, state.result.documents);
+  state.libraryDocuments = merged;
+  state.result = {
+    ...state.result,
+    ...buildImportLibraryResult(merged, "累计导入"),
+  };
+
+  if (selectedPath) {
+    const nextIndex = merged.findIndex((documentItem) => documentItem.path === selectedPath);
+    state.selectedIndex = nextIndex >= 0 ? nextIndex : 0;
+  }
+}
+
+function buildAccumulatedLibraryResult() {
+  return buildImportLibraryResult(state.libraryDocuments, "累计导入");
 }
 
 async function selectDocument(index) {
@@ -393,7 +488,7 @@ function renderEmptyDetail() {
   elements.detailTitle.textContent = "选择一个问题开始";
   elements.detailStatus.textContent = "未开始";
   elements.detailMeta.textContent = "";
-  elements.detailAnswer.textContent = "导入完成后，选中左侧任意题目即可阅读题卡。";
+  setPlainContent(elements.detailAnswer, "导入完成后，选中左侧任意题目即可阅读题卡。");
   elements.detailCacheTag.classList.add("hidden");
   elements.sourceToggle.classList.add("hidden");
   elements.sourcesPanel.classList.add("hidden");
@@ -418,7 +513,7 @@ function renderDetail(selected) {
   elements.previewConfirmActions.classList.add("hidden");
 
   if (selected.status === "pending") {
-    elements.detailAnswer.textContent = "这篇文档尚未导入。";
+    setPlainContent(elements.detailAnswer, "这篇文档尚未导入。");
     elements.detailCacheTag.classList.add("hidden");
     elements.sourceToggle.classList.add("hidden");
     elements.sourcesPanel.classList.add("hidden");
@@ -427,13 +522,13 @@ function renderDetail(selected) {
   }
 
   if (selected.status === "ready") {
-    elements.detailAnswer.textContent = selected.cardAnswer || "暂无答案";
+    renderMarkdownContent(elements.detailAnswer, selected.cardAnswer || "暂无答案", selected.path);
     elements.errorPanel.classList.add("hidden");
-    renderSources(selected.sourceTexts || []);
+    renderSources(selected.sourceTexts || [], selected.path);
     return;
   }
 
-  elements.detailAnswer.textContent = "这篇文档本次未能生成题卡。";
+  setPlainContent(elements.detailAnswer, "这篇文档本次未能生成题卡。");
   elements.detailError.textContent = selected.error || "未知错误";
   elements.errorPanel.classList.remove("hidden");
   elements.sourceToggle.classList.add("hidden");
@@ -451,14 +546,14 @@ function renderPreviewDetail(selected) {
   if (!preview) {
     elements.previewWarning.classList.add("hidden");
     elements.previewConfirmActions.classList.add("hidden");
-    elements.detailAnswer.textContent = "正在加载归一化预览...";
+    setPlainContent(elements.detailAnswer, "正在加载归一化预览...");
     return;
   }
 
   elements.detailMeta.textContent = [selected.relativePath, `编码：${preview.encoding}`]
     .filter(Boolean)
     .join(" · ");
-  elements.detailAnswer.textContent = preview.normalizedBody || "正文为空，无法预览。";
+  renderMarkdownContent(elements.detailAnswer, preview.normalizedBody || "正文为空，无法预览。", selected.path);
 
   if (preview.suspectedGarbled) {
     elements.previewWarning.textContent = preview.warning || "检测到疑似乱码，请人工确认后再导入。";
@@ -507,7 +602,7 @@ function renderList() {
   });
 }
 
-function renderSources(sourceTexts) {
+function renderSources(sourceTexts, documentPath) {
   if (!Array.isArray(sourceTexts) || sourceTexts.length === 0) {
     elements.sourceToggle.classList.add("hidden");
     elements.sourcesPanel.classList.add("hidden");
@@ -523,9 +618,17 @@ function renderSources(sourceTexts) {
   sourceTexts.forEach((item) => {
     const source = document.createElement("div");
     source.className = "source";
-    source.textContent = item;
+    source.innerHTML = renderMarkdownToHtml(item, { documentPath });
     elements.detailSources.appendChild(source);
   });
+}
+
+function renderMarkdownContent(element, markdown, documentPath) {
+  element.innerHTML = renderMarkdownToHtml(markdown, { documentPath });
+}
+
+function setPlainContent(element, text) {
+  element.textContent = text;
 }
 
 function toolbarText() {
@@ -810,3 +913,4 @@ function mockProcessDocument(path, relativePath) {
 
 setupEvents();
 render();
+void restoreImportedLibrary();

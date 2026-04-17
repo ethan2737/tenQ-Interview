@@ -278,6 +278,57 @@ button:focus-visible {
   font-size: 13px;
 }
 
+.answer,
+.source {
+  line-height: 1.8;
+}
+
+.answer p,
+.source p {
+  margin: 0 0 14px;
+}
+
+.answer p:last-child,
+.source p:last-child {
+  margin-bottom: 0;
+}
+
+.answer pre,
+.source pre {
+  margin: 16px 0;
+  padding: 16px 18px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(31, 41, 51, 0.06);
+}
+
+.answer code,
+.source code {
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 13px;
+}
+
+.answer :not(pre) > code,
+.source :not(pre) > code {
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(31, 41, 51, 0.08);
+}
+
+.answer img,
+.source img {
+  display: block;
+  max-width: 100%;
+  margin: 8px 0;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+}
+
+.md-figure {
+  margin: 16px 0;
+}
+
 .detail__meta {
   margin-top: 12px;
   font-size: 13px;

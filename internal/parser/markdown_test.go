@@ -24,3 +24,22 @@ func TestParseMarkdownExtractsHeadingAndBody(t *testing.T) {
 		t.Fatalf("unexpected path: %q", doc.Path)
 	}
 }
+
+func TestParseMarkdownStripsUTF8BOMFromHeading(t *testing.T) {
+	t.Parallel()
+
+	markdown := "\uFEFF# GMP 是什么？\n\nGMP 是 Go 的调度模型。"
+
+	doc, err := ParseMarkdown("docs-go/bom.md", markdown)
+	if err != nil {
+		t.Fatalf("ParseMarkdown returned error: %v", err)
+	}
+
+	if doc.Title != "GMP 是什么？" {
+		t.Fatalf("unexpected title: %q", doc.Title)
+	}
+
+	if doc.Body != "GMP 是 Go 的调度模型。" {
+		t.Fatalf("unexpected body: %q", doc.Body)
+	}
+}

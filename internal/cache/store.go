@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 type Entry struct {
@@ -53,6 +54,33 @@ func (s *Store) Put(key string, entry Entry) {
 		s.Entries = map[string]Entry{}
 	}
 	s.Entries[key] = entry
+}
+
+func (s *Store) Clear() {
+	if s == nil {
+		return
+	}
+	s.Entries = map[string]Entry{}
+}
+
+func (s *Store) List() []Entry {
+	if s == nil || len(s.Entries) == 0 {
+		return nil
+	}
+
+	entries := make([]Entry, 0, len(s.Entries))
+	for _, entry := range s.Entries {
+		entries = append(entries, entry)
+	}
+
+	sort.Slice(entries, func(i int, j int) bool {
+		if entries[i].Path == entries[j].Path {
+			return entries[i].Key < entries[j].Key
+		}
+		return entries[i].Path < entries[j].Path
+	})
+
+	return entries
 }
 
 func (s *Store) Save(path string) error {

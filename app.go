@@ -61,6 +61,20 @@ func (a *App) PreviewDocument(path string) (workbench.DocumentPreview, error) {
 	return a.service.PreviewDocument(path)
 }
 
+func (a *App) ListImportedDocuments() (workbench.ImportResult, error) {
+	if err := a.ready(); err != nil {
+		return workbench.ImportResult{}, err
+	}
+	return a.service.ListImportedDocuments()
+}
+
+func (a *App) ClearImportedDocuments() error {
+	if err := a.ready(); err != nil {
+		return err
+	}
+	return a.service.ClearImportedDocuments()
+}
+
 func (a *App) SelectMarkdownFile() (string, error) {
 	if a.ctx == nil {
 		return "", errors.New("application context is not ready")
