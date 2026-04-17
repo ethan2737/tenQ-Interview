@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "tenq-interview",
+  "outputfilename": "tenq-interview",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "ethan",
+    "email": "meng_jingyuan@126.com"
+  }
+}
