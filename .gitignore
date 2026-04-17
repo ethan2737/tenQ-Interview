@@ -5,3 +5,12 @@ docs-go/
 build/
 frontend/node_modules/
 frontend/dist/
+frontend/wailsjs/
+
+# local editor files
+.idea/
+.vscode/
+.DS_Store
+
+# local reports
+coverage.out
