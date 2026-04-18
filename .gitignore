@@ -1,6 +1,7 @@
 # notes
 docs-go/
 .gocache/
+.omc/
 .gopath/
 build/
 frontend/node_modules/
@@ -20,3 +21,6 @@ coverage.out
 .worktrees/
 AGENTS.md
 CLAUDE.md
+
+# environment variables
+.env

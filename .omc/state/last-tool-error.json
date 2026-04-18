@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"git checkout feature/agent-llm-provider\",\"description\":\"Switch to feature/agent-llm-provider branch\"}",
+  "error": "Exit code 128\nfatal: 'feature/agent-llm-provider' is already used by worktree at 'E:/Project/Agent/TenQ-Interview/.worktrees/feature-agent-llm-provider'",
+  "timestamp": "2026-04-17T23:15:40.833Z",
+  "retry_count": 1
+}
