@@ -104,14 +104,14 @@ func NewServiceWithCache(cachePath string) (*Service, error) {
 	return newService(store, cachePath), nil
 }
 
-func NewServiceWithOptions(cachePath string, rootDir string) (*Service, error) {
+func NewServiceWithOptions(cachePath string, configRoots ...string) (*Service, error) {
 	store, err := cache.LoadStore(cachePath)
 	if err != nil {
 		return nil, err
 	}
 
 	service := newService(store, cachePath)
-	if err := service.configureAgent(rootDir); err != nil {
+	if err := service.configureAgent(configRoots...); err != nil {
 		return nil, err
 	}
 	return service, nil
@@ -127,8 +127,8 @@ func newService(store *cache.Store, cachePath string) *Service {
 	}
 }
 
-func (s *Service) configureAgent(rootDir string) error {
-	cfg, err := agent.LoadConfigFromEnv(rootDir)
+func (s *Service) configureAgent(configRoots ...string) error {
+	cfg, err := agent.LoadConfigFromEnv(configRoots...)
 	if err != nil {
 		var missingKeyErr bool
 		if errors.Is(err, os.ErrNotExist) {

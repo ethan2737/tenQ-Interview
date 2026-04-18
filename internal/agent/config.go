@@ -27,8 +27,8 @@ type Config struct {
 	ModelScope      ProviderConfig
 }
 
-func LoadConfigFromEnv(rootDir string) (Config, error) {
-	if rootDir != "" {
+func LoadConfigFromEnv(rootDirs ...string) (Config, error) {
+	for _, rootDir := range uniqueConfigRoots(rootDirs...) {
 		if err := loadDotEnv(filepath.Join(rootDir, ".env")); err != nil {
 			return Config{}, err
 		}
@@ -66,6 +66,23 @@ func LoadConfigFromEnv(rootDir string) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func uniqueConfigRoots(rootDirs ...string) []string {
+	seen := make(map[string]struct{}, len(rootDirs))
+	roots := make([]string, 0, len(rootDirs))
+	for _, rootDir := range rootDirs {
+		rootDir = strings.TrimSpace(rootDir)
+		if rootDir == "" {
+			continue
+		}
+		if _, ok := seen[rootDir]; ok {
+			continue
+		}
+		seen[rootDir] = struct{}{}
+		roots = append(roots, rootDir)
+	}
+	return roots
 }
 
 func loadDotEnv(path string) error {

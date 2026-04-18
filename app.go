@@ -24,8 +24,14 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	rootDir, _ := os.Getwd()
-	service, err := workbench.NewServiceWithOptions(defaultCachePath(), rootDir)
+	cwd, _ := os.Getwd()
+	exePath, exeErr := os.Executable()
+	exeDir := ""
+	if exeErr == nil {
+		exeDir = filepath.Dir(exePath)
+	}
+
+	service, err := workbench.NewServiceWithOptions(defaultCachePath(), exeDir, cwd)
 	if err != nil {
 		a.startupErr = err
 		return

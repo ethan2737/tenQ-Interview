@@ -37,3 +37,23 @@ func TestLoadConfigReadsDotEnvWhenProcessEnvMissing(t *testing.T) {
 		t.Fatalf("unexpected model: %q", cfg.ModelScope.Model)
 	}
 }
+
+func TestLoadConfigPrefersEarlierConfigRoot(t *testing.T) {
+	firstRoot := t.TempDir()
+	secondRoot := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(firstRoot, ".env"), []byte("LLM_PROVIDER_DEFAULT=deepseek\nDEEPSEEK_API_KEY=first-key\n"), 0o600); err != nil {
+		t.Fatalf("failed to write first .env: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(secondRoot, ".env"), []byte("LLM_PROVIDER_DEFAULT=deepseek\nDEEPSEEK_API_KEY=second-key\n"), 0o600); err != nil {
+		t.Fatalf("failed to write second .env: %v", err)
+	}
+
+	cfg, err := LoadConfigFromEnv(firstRoot, secondRoot)
+	if err != nil {
+		t.Fatalf("LoadConfigFromEnv returned error: %v", err)
+	}
+	if cfg.DeepSeek.APIKey != "first-key" {
+		t.Fatalf("expected first config root to win, got %q", cfg.DeepSeek.APIKey)
+	}
+}
