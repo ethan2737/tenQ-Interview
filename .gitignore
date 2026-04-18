@@ -1,5 +1,6 @@
 # notes
 docs-go/
+docs/
 .gocache/
 .omc/
 .gopath/
