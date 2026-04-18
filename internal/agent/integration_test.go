@@ -10,32 +10,30 @@ import (
 	"tenq-interview/internal/agent"
 )
 
-// TestDeepSeekRealAPICall 真实调用 DeepSeek API 的集成测试
-// 需要 .env 文件中配置有效的 DEEPSEEK_API_KEY
-// 运行：go test -run TestDeepSeekRealAPICall -v
+// TestDeepSeekRealAPICall exercises the real DeepSeek API.
+// It runs only when TENQ_RUN_DEEPSEEK_INTEGRATION=1 and DEEPSEEK_API_KEY is set.
 func TestDeepSeekRealAPICall(t *testing.T) {
-	// 跳过如果 API Key 未配置
+	if !agent.ShouldRunDeepSeekIntegration() {
+		t.Skipf("%s!=1, skipping real API test", agent.DeepSeekIntegrationEnv)
+	}
+
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if apiKey == "" {
 		t.Skip("DEEPSEEK_API_KEY not set, skipping real API test")
 	}
 
-	// 加载配置
 	cfg, err := agent.LoadConfigFromEnv("")
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// 创建 DeepSeek Provider
 	provider, err := agent.NewProvider(agent.ProviderDeepSeek, cfg)
 	if err != nil {
 		t.Fatalf("Failed to create provider: %v", err)
 	}
 
-	// 创建 Summarizer
 	summarizer := agent.NewSummarizer(provider, agent.PromptVersion)
 
-	// 准备测试请求（使用一个简单的面试问题）
 	testTitle := "Go 中的 defer 是什么？"
 	testBody := `defer 是 Go 语言中的一个关键字，用于延迟函数执行直到周围函数返回。
 defer 语句在以下场景非常有用：
@@ -48,7 +46,7 @@ defer 的执行顺序是 LIFO（后进先出），多个 defer 语句按照相�
 示例：
 func readFile() {
     f, _ := os.Open("file.txt")
-    defer f.Close()  // 函数返回前自动关闭文件
+    defer f.Close()
 
     data, _ := io.ReadAll(f)
     return data
@@ -69,18 +67,15 @@ defer 在返回语句之后但在函数实际返回之前执行，这意味着 d
 	fmt.Printf("标题：%s\n", testTitle)
 	fmt.Printf("正文长度：%d 字符\n", len(testBody))
 
-	// 调用 API
 	response, err := summarizer.Summarize(ctx, agent.SummarizeRequest{
 		Title:         testTitle,
 		Body:          testBody,
 		CandidateText: testSegments,
 	})
-
 	if err != nil {
 		t.Fatalf("API call failed: %v", err)
 	}
 
-	// 验证响应
 	fmt.Println("\n=== API 响应 ===")
 	fmt.Printf("Provider: %s\n", response.Provider)
 	fmt.Printf("Model: %s\n", response.Model)
@@ -100,7 +95,6 @@ defer 在返回语句之后但在函数实际返回之前执行，这意味着 d
 		fmt.Printf("\n备注:\n%s\n", response.Notes)
 	}
 
-	// 验证字段非空
 	if response.StandardAnswer == "" {
 		t.Error("StandardAnswer is empty")
 	}

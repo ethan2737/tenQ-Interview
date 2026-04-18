@@ -124,9 +124,9 @@ func (a *App) ready() error {
 }
 
 func defaultCachePath() string {
-	baseDir, err := os.UserCacheDir()
-	if err != nil || baseDir == "" {
-		baseDir = ".cache"
+	workingDir, err := os.Getwd()
+	if err != nil || workingDir == "" {
+		workingDir = "."
 	}
-	return filepath.Join(baseDir, "tenq-interview", "index.json")
+	return filepath.Join(workingDir, ".cache", "tenq-interview", "index.json")
 }

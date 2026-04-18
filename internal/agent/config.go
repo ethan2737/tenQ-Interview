@@ -28,7 +28,7 @@ type Config struct {
 }
 
 func LoadConfigFromEnv(rootDirs ...string) (Config, error) {
-	for _, rootDir := range uniqueConfigRoots(rootDirs...) {
+	for _, rootDir := range uniqueConfigRoots(expandConfigRoots(rootDirs...)...) {
 		if err := loadDotEnv(filepath.Join(rootDir, ".env")); err != nil {
 			return Config{}, err
 		}
@@ -83,6 +83,27 @@ func uniqueConfigRoots(rootDirs ...string) []string {
 		roots = append(roots, rootDir)
 	}
 	return roots
+}
+
+func expandConfigRoots(rootDirs ...string) []string {
+	expanded := make([]string, 0, len(rootDirs)*4)
+	for _, rootDir := range rootDirs {
+		rootDir = strings.TrimSpace(rootDir)
+		if rootDir == "" {
+			continue
+		}
+
+		current := rootDir
+		for {
+			expanded = append(expanded, current)
+			parent := filepath.Dir(current)
+			if parent == current {
+				break
+			}
+			current = parent
+		}
+	}
+	return expanded
 }
 
 func loadDotEnv(path string) error {
