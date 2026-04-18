@@ -24,7 +24,8 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	service, err := workbench.NewServiceWithCache(defaultCachePath())
+	rootDir, _ := os.Getwd()
+	service, err := workbench.NewServiceWithOptions(defaultCachePath(), rootDir)
 	if err != nil {
 		a.startupErr = err
 		return
@@ -47,11 +48,11 @@ func (a *App) PrepareImport(target string) (workbench.ImportResult, error) {
 	return a.service.PrepareImport(target)
 }
 
-func (a *App) ProcessDocument(path string, relativePath string) (workbench.DocumentSummary, error) {
+func (a *App) ProcessDocument(path string, relativePath string, provider string) (workbench.DocumentSummary, error) {
 	if err := a.ready(); err != nil {
 		return workbench.DocumentSummary{}, err
 	}
-	return a.service.ProcessDocument(path, relativePath)
+	return a.service.ProcessDocument(path, relativePath, provider)
 }
 
 func (a *App) PreviewDocument(path string) (workbench.DocumentPreview, error) {
@@ -66,6 +67,13 @@ func (a *App) ListImportedDocuments() (workbench.ImportResult, error) {
 		return workbench.ImportResult{}, err
 	}
 	return a.service.ListImportedDocuments()
+}
+
+func (a *App) AgentSettings() (workbench.AgentSettings, error) {
+	if err := a.ready(); err != nil {
+		return workbench.AgentSettings{}, err
+	}
+	return a.service.AgentSettings(), nil
 }
 
 func (a *App) ClearImportedDocuments() error {
