@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"tenq-interview/internal/agent"
@@ -459,5 +460,85 @@ func TestProcessDocumentFallsBackToRuleSummaryWhenAgentFails(t *testing.T) {
 	}
 	if got.PromptVersion != agent.PromptVersion {
 		t.Fatalf("expected prompt version to be kept, got %q", got.PromptVersion)
+	}
+}
+
+func TestExportDocumentMarkdownCreatesSortedDocument(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outputPath := filepath.Join(root, "document.md")
+	service := NewService()
+
+	if err := service.ExportDocumentMarkdown("第3题 GMP 是什么？", "第三题答案", outputPath); err != nil {
+		t.Fatalf("first export returned error: %v", err)
+	}
+	if err := service.ExportDocumentMarkdown("第1题 Channel 是什么？", "第一题答案", outputPath); err != nil {
+		t.Fatalf("second export returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read export file: %v", err)
+	}
+
+	content := string(raw)
+	firstIndex := strings.Index(content, "## 1. 第1题 Channel 是什么？")
+	secondIndex := strings.Index(content, "## 3. 第3题 GMP 是什么？")
+	if firstIndex == -1 || secondIndex == -1 {
+		t.Fatalf("expected exported entries to exist, got %q", content)
+	}
+	if firstIndex > secondIndex {
+		t.Fatalf("expected entries to be sorted by title number, got %q", content)
+	}
+	if !strings.Contains(content, "**答案**\n\n第一题答案") {
+		t.Fatalf("expected first answer to be rendered, got %q", content)
+	}
+	if !strings.Contains(content, "**答案**\n\n第三题答案") {
+		t.Fatalf("expected second answer to be rendered, got %q", content)
+	}
+}
+
+func TestExportDocumentMarkdownReplacesExistingEntryWithSameIndex(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outputPath := filepath.Join(root, "document.md")
+	service := NewService()
+
+	if err := service.ExportDocumentMarkdown("第2题 原始标题", "旧答案", outputPath); err != nil {
+		t.Fatalf("first export returned error: %v", err)
+	}
+	if err := service.ExportDocumentMarkdown("第2题 更新标题", "新答案", outputPath); err != nil {
+		t.Fatalf("second export returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read export file: %v", err)
+	}
+
+	content := string(raw)
+	if strings.Contains(content, "旧答案") {
+		t.Fatalf("expected old answer to be replaced, got %q", content)
+	}
+	if !strings.Contains(content, "## 2. 第2题 更新标题") {
+		t.Fatalf("expected updated title to be kept, got %q", content)
+	}
+	if strings.Count(content, "## 2.") != 1 {
+		t.Fatalf("expected only one entry for the same ordering number, got %q", content)
+	}
+}
+
+func TestExportDocumentMarkdownRejectsTitleWithoutNumber(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outputPath := filepath.Join(root, "document.md")
+	service := NewService()
+
+	err := service.ExportDocumentMarkdown("没有序号的标题", "答案", outputPath)
+	if err == nil {
+		t.Fatalf("expected export to fail when title has no number")
 	}
 }

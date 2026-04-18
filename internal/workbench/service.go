@@ -1,13 +1,19 @@
 package workbench
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 
 	"tenq-interview/internal/agent"
 	"tenq-interview/internal/cache"
@@ -28,6 +34,8 @@ var defaultRuleVersions = cache.RuleVersions{
 	SegmentVersion:   "v1",
 	GeneratorVersion: "v1",
 }
+
+var titleNumberPattern = regexp.MustCompile(`\d+`)
 
 type DocumentSummary struct {
 	Path          string   `json:"path"`
@@ -115,6 +123,13 @@ func NewServiceWithOptions(cachePath string, configRoots ...string) (*Service, e
 		return nil, err
 	}
 	return service, nil
+}
+
+type markdownExportEntry struct {
+	Index    int    `json:"index"`
+	Title    string `json:"title"`
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
 }
 
 func newService(store *cache.Store, cachePath string) *Service {
@@ -378,6 +393,44 @@ func (s *Service) ClearImportedDocuments() error {
 	return s.store.Save(s.cachePath)
 }
 
+func (s *Service) ExportDocumentMarkdown(title string, answer string, outputPath string) error {
+	if strings.TrimSpace(outputPath) == "" {
+		return errors.New("output path is required")
+	}
+
+	entry, err := newMarkdownExportEntry(title, answer)
+	if err != nil {
+		return err
+	}
+
+	entries, err := loadMarkdownExportEntries(outputPath)
+	if err != nil {
+		return err
+	}
+
+	filtered := make([]markdownExportEntry, 0, len(entries)+1)
+	for _, item := range entries {
+		if item.Index == entry.Index {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	filtered = append(filtered, entry)
+
+	sort.Slice(filtered, func(i int, j int) bool {
+		if filtered[i].Index == filtered[j].Index {
+			return filtered[i].Title < filtered[j].Title
+		}
+		return filtered[i].Index < filtered[j].Index
+	})
+
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return fmt.Errorf("create export directory: %w", err)
+	}
+
+	return os.WriteFile(outputPath, buildMarkdownExportDocument(filtered), 0o600)
+}
+
 func (s *Service) AgentSettings() AgentSettings {
 	options := []AgentOption{
 		{Value: "deepseek", Label: "DeepSeek", Enabled: s.summarizers["deepseek"] != nil},
@@ -422,4 +475,102 @@ func fingerprint(raw []byte) string {
 
 func trimExtension(name string) string {
 	return name[:len(name)-len(filepath.Ext(name))]
+}
+
+func newMarkdownExportEntry(title string, answer string) (markdownExportEntry, error) {
+	trimmedTitle := strings.TrimSpace(title)
+	if trimmedTitle == "" {
+		return markdownExportEntry{}, errors.New("document title is required")
+	}
+
+	match := titleNumberPattern.FindString(trimmedTitle)
+	if match == "" {
+		return markdownExportEntry{}, errors.New("document title must contain an ordering number")
+	}
+
+	trimmedAnswer := strings.TrimSpace(answer)
+	if trimmedAnswer == "" {
+		return markdownExportEntry{}, errors.New("document answer is empty")
+	}
+
+	var index int
+	if _, err := fmt.Sscanf(match, "%d", &index); err != nil || index <= 0 {
+		return markdownExportEntry{}, errors.New("document title contains an invalid ordering number")
+	}
+
+	return markdownExportEntry{
+		Index:    index,
+		Title:    trimmedTitle,
+		Question: trimmedTitle,
+		Answer:   trimmedAnswer,
+	}, nil
+}
+
+func loadMarkdownExportEntries(outputPath string) ([]markdownExportEntry, error) {
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read export file: %w", err)
+	}
+
+	content := strings.TrimSpace(string(raw))
+	if content == "" {
+		return nil, nil
+	}
+
+	var entries []markdownExportEntry
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "<!-- TENQ_EXPORT_ENTRY ") || !strings.HasSuffix(line, " -->") {
+			continue
+		}
+
+		payload := strings.TrimSuffix(strings.TrimPrefix(line, "<!-- TENQ_EXPORT_ENTRY "), " -->")
+		decoded, err := base64.StdEncoding.DecodeString(payload)
+		if err != nil {
+			return nil, fmt.Errorf("decode export entry: %w", err)
+		}
+
+		var entry markdownExportEntry
+		if err := json.Unmarshal(decoded, &entry); err != nil {
+			return nil, fmt.Errorf("parse export entry: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+
+	if len(entries) == 0 {
+		return nil, errors.New("existing export file is not a TenQ markdown export")
+	}
+
+	return entries, nil
+}
+
+func buildMarkdownExportDocument(entries []markdownExportEntry) []byte {
+	var builder bytes.Buffer
+	builder.WriteString("# 面试整理导出\n\n")
+	builder.WriteString("> 由 TenQ Interview 导出，所有题目按标题中的序号排序。\n\n")
+
+	for index, entry := range entries {
+		payload, _ := json.Marshal(entry)
+		builder.WriteString("<!-- TENQ_EXPORT_ENTRY ")
+		builder.WriteString(base64.StdEncoding.EncodeToString(payload))
+		builder.WriteString(" -->\n")
+		builder.WriteString("## ")
+		builder.WriteString(fmt.Sprintf("%d. %s", entry.Index, entry.Title))
+		builder.WriteString("\n\n")
+		builder.WriteString("**问题**\n\n")
+		builder.WriteString(entry.Question)
+		builder.WriteString("\n\n")
+		builder.WriteString("**答案**\n\n")
+		builder.WriteString(entry.Answer)
+		builder.WriteString("\n\n<!-- /TENQ_EXPORT_ENTRY -->")
+		if index < len(entries)-1 {
+			builder.WriteString("\n\n")
+		}
+	}
+
+	builder.WriteString("\n")
+	return builder.Bytes()
 }

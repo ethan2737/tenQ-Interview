@@ -113,6 +113,29 @@ func (a *App) SelectMarkdownDirectory() (string, error) {
 	})
 }
 
+func (a *App) SelectMarkdownExportPath() (string, error) {
+	if a.ctx == nil {
+		return "", errors.New("application context is not ready")
+	}
+	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "选择导出 Markdown",
+		DefaultFilename: "document.md",
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "Markdown",
+				Pattern:     "*.md",
+			},
+		},
+	})
+}
+
+func (a *App) ExportDocumentMarkdown(title string, answer string, outputPath string) error {
+	if err := a.ready(); err != nil {
+		return err
+	}
+	return a.service.ExportDocumentMarkdown(title, answer, outputPath)
+}
+
 func (a *App) ready() error {
 	if a.startupErr != nil {
 		return a.startupErr
