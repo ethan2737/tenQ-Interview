@@ -11,6 +11,11 @@ test("hero panel does not duplicate import buttons", () => {
   assert.doesNotMatch(html, /id="hero-import-directory"/);
 });
 
+test("detail panel exposes a markdown export action", () => {
+  assert.match(html, /id="export-actions"/);
+  assert.match(html, /id="export-document-button"/);
+});
+
 test("workbench removes redundant helper copy around the import flow", () => {
   assert.doesNotMatch(html, /class="sidebar__copy"/);
   assert.doesNotMatch(html, /id="toolbar-meta"/);

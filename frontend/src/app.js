@@ -43,6 +43,8 @@ const elements = {
   detailMeta: document.getElementById("detail-meta"),
   detailMainLabel: document.getElementById("detail-main-label"),
   detailAnswer: document.getElementById("detail-answer"),
+  exportActions: document.getElementById("export-actions"),
+  exportDocumentButton: document.getElementById("export-document-button"),
   detailOutline: document.getElementById("detail-outline"),
   detailSources: document.getElementById("detail-sources"),
   detailError: document.getElementById("detail-error"),
@@ -70,6 +72,12 @@ const api = {
       return window.go.main.App.SelectMarkdownDirectory();
     }
     return "";
+  },
+  async selectExportPath() {
+    if (window.go?.main?.App?.SelectMarkdownExportPath) {
+      return window.go.main.App.SelectMarkdownExportPath();
+    }
+    return "document.md";
   },
   async prepareImport(target) {
     if (window.go?.main?.App?.PrepareImport) {
@@ -101,6 +109,12 @@ const api = {
     }
     return undefined;
   },
+  async exportDocumentMarkdown(title, answer, outputPath) {
+    if (window.go?.main?.App?.ExportDocumentMarkdown) {
+      return window.go.main.App.ExportDocumentMarkdown(title, answer, outputPath);
+    }
+    return undefined;
+  },
   async agentSettings() {
     if (window.go?.main?.App?.AgentSettings) {
       return window.go.main.App.AgentSettings();
@@ -123,6 +137,9 @@ function setupEvents() {
   elements.confirmImportButton.addEventListener("click", () => runImportQueue());
   elements.cancelImportButton.addEventListener("click", () => {
     void resetImport();
+  });
+  elements.exportDocumentButton.addEventListener("click", () => {
+    void exportSelectedDocument();
   });
   elements.retryDocumentButton.addEventListener("click", () => retrySelectedDocument());
   elements.confirmDocumentButton.addEventListener("click", () => toggleConfirmSelectedDocument());
@@ -314,6 +331,32 @@ async function retrySelectedDocument() {
     state.result.failed += 1;
   } finally {
     state.processingPath = "";
+    state.busy = false;
+    render();
+  }
+}
+
+async function exportSelectedDocument() {
+  const selected = getSelectedDocument();
+  if (!selected || state.busy || selected.status !== "ready") {
+    return;
+  }
+
+  const outputPath = await api.selectExportPath();
+  if (!outputPath) {
+    return;
+  }
+
+  state.busy = true;
+  state.error = "";
+  render();
+
+  try {
+    await api.exportDocumentMarkdown(selected.title || "", selected.cardAnswer || "", outputPath);
+    window.alert(`已导出到 ${outputPath}`);
+  } catch (error) {
+    state.error = error?.message || String(error);
+  } finally {
     state.busy = false;
     render();
   }
@@ -544,6 +587,7 @@ function renderEmptyDetail() {
   elements.detailMeta.textContent = "";
   setPlainContent(elements.detailAnswer, "导入完成后，选中文档即可查看整理后的题卡。");
   elements.detailCacheTag.classList.add("hidden");
+  elements.exportActions.classList.add("hidden");
   elements.outlinePanel.classList.add("hidden");
   elements.sourceToggle.classList.add("hidden");
   elements.sourcesPanel.classList.add("hidden");
@@ -566,6 +610,7 @@ function renderDetail(selected) {
   elements.detailMainLabel.textContent = "标准答案";
   elements.previewWarning.classList.add("hidden");
   elements.previewConfirmActions.classList.add("hidden");
+  elements.exportActions.classList.add("hidden");
 
   if (state.phase === "processing" && state.processingPath === selected.path) {
     setAnswerLoading(true);
@@ -595,6 +640,7 @@ function renderDetail(selected) {
     setAnswerLoading(false);
     renderMarkdownContent(elements.detailAnswer, selected.cardAnswer || "暂无答案", selected.path);
     elements.errorPanel.classList.add("hidden");
+    elements.exportActions.classList.remove("hidden");
     renderOutline(selected.memoryOutline || []);
     renderSources(selected.sourceTexts || [], selected.path);
     return;
@@ -874,6 +920,7 @@ function toggleBusyState(isBusy) {
     elements.providerSelect,
     elements.retryDocumentButton,
     elements.confirmDocumentButton,
+    elements.exportDocumentButton,
   ].filter(Boolean).forEach((button) => {
     button.disabled = isBusy;
   });
