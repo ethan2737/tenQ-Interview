@@ -52,10 +52,60 @@
     };
   }
 
+  function isReadyDocument(documentItem) {
+    return documentItem?.status === "ready" && typeof documentItem.path === "string" && documentItem.path !== "";
+  }
+
+  function sanitizeExportSelection(documents, selectedPaths) {
+    const readyPathSet = new Set(
+      (Array.isArray(documents) ? documents : [])
+        .filter((documentItem) => isReadyDocument(documentItem))
+        .map((documentItem) => documentItem.path),
+    );
+
+    return new Set([...selectedPaths].filter((path) => readyPathSet.has(path)));
+  }
+
+  function buildExportSelectionState(documents, selectedPaths) {
+    const readyPaths = (Array.isArray(documents) ? documents : [])
+      .filter((documentItem) => isReadyDocument(documentItem))
+      .map((documentItem) => documentItem.path);
+    const sanitizedSelection = sanitizeExportSelection(documents, selectedPaths);
+    const selectedReadyPaths = readyPaths.filter((path) => sanitizedSelection.has(path));
+
+    return {
+      readyPaths,
+      selectedReadyPaths,
+      selectedCount: selectedReadyPaths.length,
+      allReadySelected: readyPaths.length > 0 && selectedReadyPaths.length === readyPaths.length,
+      someReadySelected:
+        selectedReadyPaths.length > 0 && selectedReadyPaths.length < readyPaths.length,
+    };
+  }
+
+  function toggleAllReadySelections(documents, selectedPaths, shouldSelectAll) {
+    const nextSelection = new Set(selectedPaths);
+    const { readyPaths } = buildExportSelectionState(documents, selectedPaths);
+
+    readyPaths.forEach((path) => {
+      if (shouldSelectAll) {
+        nextSelection.add(path);
+        return;
+      }
+      nextSelection.delete(path);
+    });
+
+    return nextSelection;
+  }
+
   const api = {
     buildLibraryResult,
+    buildExportSelectionState,
     countDocumentStats,
+    isReadyDocument,
     mergeImportedDocuments,
+    sanitizeExportSelection,
+    toggleAllReadySelections,
   };
 
   globalScope.TenQImportSession = api;

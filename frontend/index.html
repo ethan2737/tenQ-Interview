@@ -15,6 +15,14 @@
         </div>
 
         <div class="sidebar__status" id="sidebar-status">尚未导入资料</div>
+        <div class="sidebar__selection hidden" id="batch-export-toolbar">
+          <label class="sidebar__selection-toggle" for="select-all-ready">
+            <input id="select-all-ready" type="checkbox" />
+            <span>全选可用题目</span>
+          </label>
+          <span class="sidebar__selection-count" id="selected-export-count">已选 0 篇</span>
+          <button id="batch-export-button" class="toolbar__button" type="button">批量导出</button>
+        </div>
         <nav class="sidebar__list" id="document-list" aria-label="文档列表"></nav>
       </aside>
 

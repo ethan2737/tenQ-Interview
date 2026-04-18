@@ -16,6 +16,13 @@ test("detail panel exposes a markdown export action", () => {
   assert.match(html, /id="export-document-button"/);
 });
 
+test("sidebar exposes batch markdown export controls", () => {
+  assert.match(html, /id="batch-export-toolbar"/);
+  assert.match(html, /id="select-all-ready"/);
+  assert.match(html, /id="selected-export-count"/);
+  assert.match(html, /id="batch-export-button"/);
+});
+
 test("workbench removes redundant helper copy around the import flow", () => {
   assert.doesNotMatch(html, /class="sidebar__copy"/);
   assert.doesNotMatch(html, /id="toolbar-meta"/);

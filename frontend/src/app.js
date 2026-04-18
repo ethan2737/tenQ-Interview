@@ -1,7 +1,11 @@
 ﻿const CONFIRMED_STORAGE_KEY = "tenq-interview.confirmed-preview-keys.v1";
 const {
   buildLibraryResult: buildImportLibraryResult,
+  buildExportSelectionState,
+  isReadyDocument,
   mergeImportedDocuments,
+  sanitizeExportSelection,
+  toggleAllReadySelections,
 } = window.TenQImportSession;
 const { normalizeAgentSettings } = window.TenQAgentOptions;
 const { renderMarkdownToHtml } = window.TenQMarkdownRender;
@@ -20,11 +24,16 @@ const state = {
   phase: "idle",
   previewCache: {},
   confirmedPreviewKeys: loadConfirmedPreviewKeys(),
+  selectedExportPaths: new Set(),
 };
 
 const elements = {
   list: document.getElementById("document-list"),
   sidebarStatus: document.getElementById("sidebar-status"),
+  batchExportToolbar: document.getElementById("batch-export-toolbar"),
+  selectAllReady: document.getElementById("select-all-ready"),
+  selectedExportCount: document.getElementById("selected-export-count"),
+  batchExportButton: document.getElementById("batch-export-button"),
   providerSelect: document.getElementById("provider-select"),
   sidebarToggleButton: document.getElementById("sidebar-toggle-button"),
   heroPanel: document.getElementById("hero-panel"),
@@ -73,11 +82,11 @@ const api = {
     }
     return "";
   },
-  async selectExportPath() {
-    if (window.go?.main?.App?.SelectMarkdownExportPath) {
-      return window.go.main.App.SelectMarkdownExportPath();
+  async selectExportDirectory() {
+    if (window.go?.main?.App?.SelectMarkdownDirectory) {
+      return window.go.main.App.SelectMarkdownDirectory();
     }
-    return "document.md";
+    return "";
   },
   async prepareImport(target) {
     if (window.go?.main?.App?.PrepareImport) {
@@ -115,6 +124,12 @@ const api = {
     }
     return undefined;
   },
+  async exportDocumentsMarkdown(documents, outputPath) {
+    if (window.go?.main?.App?.ExportDocumentsMarkdown) {
+      return window.go.main.App.ExportDocumentsMarkdown(documents, outputPath);
+    }
+    return undefined;
+  },
   async agentSettings() {
     if (window.go?.main?.App?.AgentSettings) {
       return window.go.main.App.AgentSettings();
@@ -138,8 +153,14 @@ function setupEvents() {
   elements.cancelImportButton.addEventListener("click", () => {
     void resetImport();
   });
+  elements.selectAllReady.addEventListener("change", (event) => {
+    handleSelectAllReady(event.target.checked);
+  });
   elements.exportDocumentButton.addEventListener("click", () => {
     void exportSelectedDocument();
+  });
+  elements.batchExportButton.addEventListener("click", () => {
+    void exportSelectedDocuments();
   });
   elements.retryDocumentButton.addEventListener("click", () => retrySelectedDocument());
   elements.confirmDocumentButton.addEventListener("click", () => toggleConfirmSelectedDocument());
@@ -242,6 +263,7 @@ async function restoreImportedLibrary() {
       sourceTexts: Array.isArray(documentItem.sourceTexts) ? [...documentItem.sourceTexts] : [],
     }));
     state.result = buildAccumulatedLibraryResult();
+    state.selectedExportPaths = sanitizeExportSelection(state.result.documents, state.selectedExportPaths);
     state.selectedIndex = state.result.documents.length > 0 ? 0 : -1;
     state.phase = "done";
     state.sourcesOpen = false;
@@ -342,10 +364,11 @@ async function exportSelectedDocument() {
     return;
   }
 
-  const outputPath = await api.selectExportPath();
-  if (!outputPath) {
+  const outputDirectory = await api.selectExportDirectory();
+  if (!outputDirectory) {
     return;
   }
+  const outputPath = `${outputDirectory.replace(/[\\/]+$/, "")}/document.md`;
 
   state.busy = true;
   state.error = "";
@@ -354,6 +377,39 @@ async function exportSelectedDocument() {
   try {
     await api.exportDocumentMarkdown(selected.title || "", selected.cardAnswer || "", outputPath);
     window.alert(`已导出到 ${outputPath}`);
+  } catch (error) {
+    state.error = error?.message || String(error);
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function exportSelectedDocuments() {
+  const documents = getSelectedExportDocuments();
+  if (state.busy || documents.length === 0) {
+    return;
+  }
+
+  const outputDirectory = await api.selectExportDirectory();
+  if (!outputDirectory) {
+    return;
+  }
+  const outputPath = `${outputDirectory.replace(/[\\/]+$/, "")}/document.md`;
+
+  state.busy = true;
+  state.error = "";
+  render();
+
+  try {
+    await api.exportDocumentsMarkdown(
+      documents.map((documentItem) => ({
+        title: documentItem.title || "",
+        answer: documentItem.cardAnswer || "",
+      })),
+      outputPath,
+    );
+    window.alert(`已批量导出到 ${outputPath}`);
   } catch (error) {
     state.error = error?.message || String(error);
   } finally {
@@ -419,6 +475,7 @@ async function resetImport() {
       state.libraryDocuments = [];
       state.result = null;
       state.selectedIndex = -1;
+      state.selectedExportPaths = new Set();
       state.sourcesOpen = false;
       state.phase = "idle";
       state.previewCache = {};
@@ -437,6 +494,7 @@ async function resetImport() {
   state.previewCache = {};
   if (state.libraryDocuments.length > 0) {
     state.result = buildAccumulatedLibraryResult();
+    state.selectedExportPaths = sanitizeExportSelection(state.result.documents, state.selectedExportPaths);
     state.selectedIndex = state.result.documents.length > 0 ? 0 : -1;
     state.phase = "done";
     render();
@@ -470,6 +528,7 @@ function commitImportedBatch() {
     ...state.result,
     ...buildImportLibraryResult(merged, "累计导入"),
   };
+  state.selectedExportPaths = sanitizeExportSelection(state.result.documents, state.selectedExportPaths);
 
   if (selectedPath) {
     const nextIndex = merged.findIndex((documentItem) => documentItem.path === selectedPath);
@@ -522,6 +581,7 @@ function render() {
   elements.sidebarToggleButton.textContent = mobileSidebarActive ? "收起目录" : "文档目录";
 
   toggleBusyState(state.busy);
+  renderSelectionToolbar();
   renderList();
 
   elements.heroPanel.classList.toggle("hidden", hasResult);
@@ -711,6 +771,31 @@ function renderList() {
     }
     button.addEventListener("click", () => void selectDocument(index));
 
+    if (isReadyDocument(documentItem)) {
+      const checkboxWrap = document.createElement("span");
+      checkboxWrap.className = "sidebar__item-check";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = state.selectedExportPaths.has(documentItem.path);
+      checkbox.setAttribute("aria-label", `选择 ${documentItem.title || documentItem.relativePath || "当前文档"}`);
+      checkbox.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+      checkbox.addEventListener("change", (event) => {
+        event.stopPropagation();
+        toggleDocumentSelection(documentItem.path, event.target.checked);
+      });
+      checkboxWrap.appendChild(checkbox);
+      button.appendChild(checkboxWrap);
+    }
+
+    const content = document.createElement("span");
+    content.className = "sidebar__item-content";
+    if (!isReadyDocument(documentItem)) {
+      content.style.gridColumn = "1 / -1";
+    }
+
     const title = document.createElement("span");
     title.className = "sidebar__title";
     title.textContent = documentItem.title || documentItem.relativePath || "未命名文档";
@@ -719,9 +804,22 @@ function renderList() {
     path.className = "sidebar__path";
     path.textContent = statusLabel(documentItem.status, documentItem.path);
 
-    button.append(title, path);
+    content.append(title, path);
+    button.appendChild(content);
     elements.list.appendChild(button);
   });
+}
+
+function renderSelectionToolbar() {
+  const documents = state.result?.documents || [];
+  const selection = buildExportSelectionState(documents, state.selectedExportPaths);
+
+  elements.batchExportToolbar.classList.toggle("hidden", selection.readyPaths.length === 0);
+  elements.selectedExportCount.textContent = `已选 ${selection.selectedCount} 篇`;
+  elements.selectAllReady.checked = selection.allReadySelected;
+  elements.selectAllReady.indeterminate = selection.someReadySelected;
+  elements.selectAllReady.disabled = state.busy || selection.readyPaths.length === 0;
+  elements.batchExportButton.disabled = state.busy || selection.selectedCount === 0;
 }
 
 function renderSources(sourceTexts, documentPath) {
@@ -862,6 +960,39 @@ function getSelectedDocument() {
   return state.result.documents[state.selectedIndex] || null;
 }
 
+function getSelectedExportDocuments() {
+  if (!state.result) {
+    return [];
+  }
+  const selectedPathSet = sanitizeExportSelection(state.result.documents, state.selectedExportPaths);
+  return state.result.documents.filter(
+    (documentItem) => isReadyDocument(documentItem) && selectedPathSet.has(documentItem.path),
+  );
+}
+
+function toggleDocumentSelection(path, checked) {
+  if (!path) {
+    return;
+  }
+  const nextSelection = new Set(state.selectedExportPaths);
+  if (checked) {
+    nextSelection.add(path);
+  } else {
+    nextSelection.delete(path);
+  }
+  state.selectedExportPaths = sanitizeExportSelection(state.result?.documents || [], nextSelection);
+  render();
+}
+
+function handleSelectAllReady(checked) {
+  state.selectedExportPaths = toggleAllReadySelections(
+    state.result?.documents || [],
+    state.selectedExportPaths,
+    checked,
+  );
+  render();
+}
+
 function suspiciousPreviewCount() {
   return Object.values(state.previewCache).filter((preview) => preview.suspectedGarbled).length;
 }
@@ -920,6 +1051,8 @@ function toggleBusyState(isBusy) {
     elements.providerSelect,
     elements.retryDocumentButton,
     elements.confirmDocumentButton,
+    elements.selectAllReady,
+    elements.batchExportButton,
     elements.exportDocumentButton,
   ].filter(Boolean).forEach((button) => {
     button.disabled = isBusy;
