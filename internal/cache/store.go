@@ -9,12 +9,17 @@ import (
 )
 
 type Entry struct {
-	Key         string   `json:"key"`
-	Path        string   `json:"path"`
-	Title       string   `json:"title"`
-	Encoding    string   `json:"encoding"`
-	CardAnswer  string   `json:"cardAnswer"`
-	SourceTexts []string `json:"sourceTexts"`
+	Key           string   `json:"key"`
+	Path          string   `json:"path"`
+	Title         string   `json:"title"`
+	Encoding      string   `json:"encoding"`
+	Provider      string   `json:"provider,omitempty"`
+	Model         string   `json:"model,omitempty"`
+	CardAnswer    string   `json:"cardAnswer"`
+	MemoryOutline []string `json:"memoryOutline,omitempty"`
+	SourceTexts   []string `json:"sourceTexts"`
+	Notes         string   `json:"notes,omitempty"`
+	PromptVersion string   `json:"promptVersion,omitempty"`
 }
 
 type Store struct {

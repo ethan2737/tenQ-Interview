@@ -12,9 +12,6 @@
         <div class="sidebar__header">
           <p class="eyebrow">TenQ Interview</p>
           <h1>晨间复习台</h1>
-          <p class="sidebar__copy">
-            导入 Markdown 后，左侧保留原始目录顺序，右侧直接进入题卡阅读。
-          </p>
         </div>
 
         <div class="sidebar__status" id="sidebar-status">尚未导入资料</div>
@@ -36,37 +33,30 @@
             <button id="import-file-button" class="toolbar__button toolbar__button--primary">
               导入文件
             </button>
-            <button id="import-directory-button" class="toolbar__button">
-              导入文件夹
-            </button>
+            <button id="import-directory-button" class="toolbar__button">导入文件夹</button>
+            <label class="toolbar__select-wrap" for="provider-select">
+              <select id="provider-select" class="toolbar__select" aria-label="Agent 接入方式"></select>
+            </label>
           </div>
-          <div class="toolbar__meta" id="toolbar-meta">支持 Markdown，保持原始目录结构</div>
         </header>
 
         <section class="panel panel--hero" id="hero-panel">
           <p class="eyebrow">Quiet Editorial Utility</p>
           <h2>开始今天的面试复习</h2>
-          <p>
-            先导入单个 Markdown 或整组目录。系统会完成编码归一化、Markdown 解析、
-            原文片段抽取、题卡生成和本地缓存。
-          </p>
-          <div class="hero__actions">
-            <button id="hero-import-file" class="toolbar__button toolbar__button--primary">
-              导入文档
-            </button>
-            <button id="hero-import-directory" class="toolbar__button">
-              导入文件夹
-            </button>
-          </div>
+          <p>先导入单篇 Markdown 或整个目录，系统会在右侧生成适合复述的题卡。</p>
         </section>
 
         <section class="panel panel--summary hidden" id="summary-panel" aria-live="polite">
           <div class="summary__header">
             <div>
-              <p class="eyebrow">导入概览</p>
               <h2 id="summary-title">导入预览</h2>
             </div>
-            <p class="summary__target" id="summary-target"></p>
+            <div class="summary__actions">
+              <button id="confirm-import-button" class="toolbar__button toolbar__button--primary">
+                开始导入
+              </button>
+              <button id="cancel-import-button" class="toolbar__button">取消</button>
+            </div>
           </div>
           <p class="summary__hint hidden" id="summary-hint"></p>
           <div class="summary__stats">
@@ -83,19 +73,13 @@
               <strong class="stat__value" id="stat-failed">0</strong>
             </article>
           </div>
-          <div class="summary__actions">
-            <button id="confirm-import-button" class="toolbar__button toolbar__button--primary">
-              开始导入
-            </button>
-            <button id="cancel-import-button" class="toolbar__button">取消</button>
-          </div>
         </section>
 
         <section class="panel panel--detail hidden" id="detail-panel">
           <div class="detail__header">
             <div>
               <p class="eyebrow">题目</p>
-              <h2 id="detail-title">选择一个问题开始</h2>
+              <h2 id="detail-title">选择一篇文档开始</h2>
             </div>
             <div class="detail__tags">
               <span class="tag" id="detail-status">未开始</span>
@@ -108,9 +92,7 @@
 
           <section class="detail__section">
             <p class="detail__section-label" id="detail-main-label">标准答案</p>
-            <div class="answer" id="detail-answer">
-              选中左侧问题后，这里会显示压缩后的标准答案。
-            </div>
+            <div class="answer" id="detail-answer">导入完成后，选中文档即可查看整理后的题卡。</div>
             <div class="detail__actions hidden" id="preview-confirm-actions">
               <button id="confirm-document-button" class="toolbar__button toolbar__button--primary">
                 确认该文档可导入
@@ -119,6 +101,11 @@
             <button class="link-button hidden" id="source-toggle" type="button">
               基于原文整理，可展开查看依据
             </button>
+          </section>
+
+          <section class="detail__section hidden" id="outline-panel">
+            <p class="detail__section-label">记忆提纲</p>
+            <div class="outline" id="detail-outline"></div>
           </section>
 
           <section class="detail__section hidden" id="sources-panel">
@@ -138,6 +125,7 @@
     </div>
 
     <script src="./src/import-session.js"></script>
+    <script src="./src/agent-options.js"></script>
     <script src="./src/markdown-render.js"></script>
     <script src="./src/app.js"></script>
   </body>

@@ -1,12 +1,32 @@
 package workbench
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"tenq-interview/internal/agent"
+
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
+
+type stubSummarizer struct {
+	response agent.SummarizeResponse
+	err      error
+	model    string
+	version  string
+}
+
+func (s stubSummarizer) Summarize(ctx context.Context, req agent.SummarizeRequest) (agent.SummarizeResponse, error) {
+	if s.err != nil {
+		return agent.SummarizeResponse{}, s.err
+	}
+	return s.response, nil
+}
+
+func (s stubSummarizer) ProviderModel() string { return s.model }
+func (s stubSummarizer) PromptVersion() string { return s.version }
 
 func TestImportPathBuildsDocumentSummaries(t *testing.T) {
 	t.Parallel()
@@ -125,7 +145,7 @@ func TestProcessDocumentUsesCacheOnSecondRun(t *testing.T) {
 		t.Fatalf("NewServiceWithCache returned error: %v", err)
 	}
 
-	first, err := service.ProcessDocument(docPath, "gmp.md")
+	first, err := service.ProcessDocument(docPath, "gmp.md", "")
 	if err != nil {
 		t.Fatalf("ProcessDocument returned error: %v", err)
 	}
@@ -133,7 +153,7 @@ func TestProcessDocumentUsesCacheOnSecondRun(t *testing.T) {
 		t.Fatalf("expected first run to be fresh")
 	}
 
-	second, err := service.ProcessDocument(docPath, "gmp.md")
+	second, err := service.ProcessDocument(docPath, "gmp.md", "")
 	if err != nil {
 		t.Fatalf("ProcessDocument returned error: %v", err)
 	}
@@ -157,7 +177,7 @@ func TestProcessDocumentCanRecoverAfterFailure(t *testing.T) {
 		t.Fatalf("NewServiceWithCache returned error: %v", err)
 	}
 
-	first, err := service.ProcessDocument(docPath, "broken.md")
+	first, err := service.ProcessDocument(docPath, "broken.md", "")
 	if err != nil {
 		t.Fatalf("ProcessDocument returned error: %v", err)
 	}
@@ -169,7 +189,7 @@ func TestProcessDocumentCanRecoverAfterFailure(t *testing.T) {
 		t.Fatalf("failed to rewrite fixture: %v", err)
 	}
 
-	second, err := service.ProcessDocument(docPath, "broken.md")
+	second, err := service.ProcessDocument(docPath, "broken.md", "")
 	if err != nil {
 		t.Fatalf("ProcessDocument returned error: %v", err)
 	}
@@ -297,10 +317,10 @@ func TestListImportedDocumentsRestoresCachedLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServiceWithCache returned error: %v", err)
 	}
-	if _, err := firstService.ProcessDocument(firstPath, "gmp.md"); err != nil {
+	if _, err := firstService.ProcessDocument(firstPath, "gmp.md", ""); err != nil {
 		t.Fatalf("ProcessDocument firstPath returned error: %v", err)
 	}
-	if _, err := firstService.ProcessDocument(secondPath, "channel.md"); err != nil {
+	if _, err := firstService.ProcessDocument(secondPath, "channel.md", ""); err != nil {
 		t.Fatalf("ProcessDocument secondPath returned error: %v", err)
 	}
 
@@ -338,7 +358,7 @@ func TestClearImportedDocumentsRemovesPersistentLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServiceWithCache returned error: %v", err)
 	}
-	if _, err := firstService.ProcessDocument(docPath, "gmp.md"); err != nil {
+	if _, err := firstService.ProcessDocument(docPath, "gmp.md", ""); err != nil {
 		t.Fatalf("ProcessDocument returned error: %v", err)
 	}
 
@@ -356,5 +376,88 @@ func TestClearImportedDocumentsRemovesPersistentLibrary(t *testing.T) {
 	}
 	if result.Total != 0 || len(result.Documents) != 0 {
 		t.Fatalf("expected cleared library to stay empty, got total=%d docs=%d", result.Total, len(result.Documents))
+	}
+}
+
+func TestProcessDocumentStoresAgentFieldsAndProvider(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	docPath := filepath.Join(root, "gmp.md")
+	if err := os.WriteFile(docPath, []byte("# GMP\n\nGMP 是 Go 的调度模型。"), 0o600); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+
+	service := NewService()
+	service.defaultProvider = "deepseek"
+	service.summarizers["deepseek"] = stubSummarizer{
+		model:   "deepseek-chat",
+		version: agent.PromptVersion,
+		response: agent.SummarizeResponse{
+			Provider:       "deepseek",
+			Model:          "deepseek-chat",
+			StandardAnswer: "GMP 是 Go 的调度模型，核心是在用户态高效调度 goroutine 到更少的线程上执行。",
+			MemoryOutline:  []string{"定义", "调度对象", "价值"},
+			SourceQuotes:   []string{"GMP 是 Go 的调度模型。"},
+			Notes:          "严格基于原文整理",
+		},
+	}
+
+	got, err := service.ProcessDocument(docPath, "gmp.md", "deepseek")
+	if err != nil {
+		t.Fatalf("ProcessDocument returned error: %v", err)
+	}
+	if got.Provider != "deepseek" {
+		t.Fatalf("expected provider to be persisted, got %q", got.Provider)
+	}
+	if got.Model != "deepseek-chat" {
+		t.Fatalf("expected model to be persisted, got %q", got.Model)
+	}
+	if len(got.MemoryOutline) == 0 || len(got.SourceTexts) == 0 {
+		t.Fatalf("expected agent fields to be populated")
+	}
+	if got.PromptVersion != agent.PromptVersion {
+		t.Fatalf("unexpected prompt version: %q", got.PromptVersion)
+	}
+}
+
+func TestProcessDocumentFallsBackToRuleSummaryWhenAgentFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	docPath := filepath.Join(root, "gmp.md")
+	if err := os.WriteFile(docPath, []byte("# GMP\n\nGMP 是 Go 的调度模型，用来高效调度 goroutine。"), 0o600); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+
+	service := NewService()
+	service.defaultProvider = "deepseek"
+	service.summarizers["deepseek"] = stubSummarizer{
+		model:   "deepseek-chat",
+		version: agent.PromptVersion,
+		err:     os.ErrDeadlineExceeded,
+	}
+
+	got, err := service.ProcessDocument(docPath, "gmp.md", "deepseek")
+	if err != nil {
+		t.Fatalf("ProcessDocument returned error: %v", err)
+	}
+	if got.Status != StatusReady {
+		t.Fatalf("expected fallback result to stay ready, got %s", got.Status)
+	}
+	if got.Error != "" {
+		t.Fatalf("expected fallback result without error, got %q", got.Error)
+	}
+	if got.CardAnswer == "" {
+		t.Fatalf("expected fallback rule answer to be populated")
+	}
+	if got.Provider != "deepseek" {
+		t.Fatalf("expected requested provider to be kept, got %q", got.Provider)
+	}
+	if got.Model != "deepseek-chat" {
+		t.Fatalf("expected provider model to be kept, got %q", got.Model)
+	}
+	if got.PromptVersion != agent.PromptVersion {
+		t.Fatalf("expected prompt version to be kept, got %q", got.PromptVersion)
 	}
 }

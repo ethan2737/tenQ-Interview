@@ -1,14 +1,18 @@
-const CONFIRMED_STORAGE_KEY = "tenq-interview.confirmed-preview-keys.v1";
+﻿const CONFIRMED_STORAGE_KEY = "tenq-interview.confirmed-preview-keys.v1";
 const {
   buildLibraryResult: buildImportLibraryResult,
   mergeImportedDocuments,
 } = window.TenQImportSession;
+const { normalizeAgentSettings } = window.TenQAgentOptions;
 const { renderMarkdownToHtml } = window.TenQMarkdownRender;
 
 const state = {
+  agentSettings: { defaultProvider: "deepseek", options: [] },
   busy: false,
   libraryDocuments: [],
+  processingPath: "",
   result: null,
+  selectedProvider: "deepseek",
   selectedIndex: -1,
   sourcesOpen: false,
   mobileSidebarOpen: false,
@@ -21,13 +25,12 @@ const state = {
 const elements = {
   list: document.getElementById("document-list"),
   sidebarStatus: document.getElementById("sidebar-status"),
-  toolbarMeta: document.getElementById("toolbar-meta"),
+  providerSelect: document.getElementById("provider-select"),
   sidebarToggleButton: document.getElementById("sidebar-toggle-button"),
   heroPanel: document.getElementById("hero-panel"),
   summaryPanel: document.getElementById("summary-panel"),
   detailPanel: document.getElementById("detail-panel"),
   summaryTitle: document.getElementById("summary-title"),
-  summaryTarget: document.getElementById("summary-target"),
   summaryHint: document.getElementById("summary-hint"),
   statTotal: document.getElementById("stat-total"),
   statReady: document.getElementById("stat-ready"),
@@ -40,18 +43,18 @@ const elements = {
   detailMeta: document.getElementById("detail-meta"),
   detailMainLabel: document.getElementById("detail-main-label"),
   detailAnswer: document.getElementById("detail-answer"),
+  detailOutline: document.getElementById("detail-outline"),
   detailSources: document.getElementById("detail-sources"),
   detailError: document.getElementById("detail-error"),
   previewWarning: document.getElementById("preview-warning"),
   previewConfirmActions: document.getElementById("preview-confirm-actions"),
   confirmDocumentButton: document.getElementById("confirm-document-button"),
   errorPanel: document.getElementById("error-panel"),
+  outlinePanel: document.getElementById("outline-panel"),
   sourcesPanel: document.getElementById("sources-panel"),
   sourceToggle: document.getElementById("source-toggle"),
   importFileButton: document.getElementById("import-file-button"),
   importDirectoryButton: document.getElementById("import-directory-button"),
-  heroImportFile: document.getElementById("hero-import-file"),
-  heroImportDirectory: document.getElementById("hero-import-directory"),
   retryDocumentButton: document.getElementById("retry-document-button"),
 };
 
@@ -76,9 +79,9 @@ const api = {
   },
   async processDocument(path, relativePath) {
     if (window.go?.main?.App?.ProcessDocument) {
-      return window.go.main.App.ProcessDocument(path, relativePath);
+      return window.go.main.App.ProcessDocument(path, relativePath, state.selectedProvider);
     }
-    return mockProcessDocument(path, relativePath);
+    return mockProcessDocument(path, relativePath, state.selectedProvider);
   },
   async previewDocument(path) {
     if (window.go?.main?.App?.PreviewDocument) {
@@ -98,17 +101,25 @@ const api = {
     }
     return undefined;
   },
+  async agentSettings() {
+    if (window.go?.main?.App?.AgentSettings) {
+      return window.go.main.App.AgentSettings();
+    }
+    return mockAgentSettings();
+  },
 };
 
 function setupEvents() {
+  elements.providerSelect.addEventListener("change", (event) => {
+    state.selectedProvider = event.target.value;
+    render();
+  });
   elements.sidebarToggleButton.addEventListener("click", () => {
     state.mobileSidebarOpen = !state.mobileSidebarOpen;
     render();
   });
   elements.importFileButton.addEventListener("click", () => startPreview("file"));
   elements.importDirectoryButton.addEventListener("click", () => startPreview("directory"));
-  elements.heroImportFile.addEventListener("click", () => startPreview("file"));
-  elements.heroImportDirectory.addEventListener("click", () => startPreview("directory"));
   elements.confirmImportButton.addEventListener("click", () => runImportQueue());
   elements.cancelImportButton.addEventListener("click", () => {
     void resetImport();
@@ -150,6 +161,17 @@ function setupEvents() {
 
   window.addEventListener("resize", syncResponsiveState);
   syncResponsiveState();
+}
+
+async function restoreAgentSettings() {
+  try {
+    state.agentSettings = normalizeAgentSettings(await api.agentSettings());
+    state.selectedProvider = state.agentSettings.defaultProvider || "deepseek";
+    renderProviderOptions();
+  } catch (error) {
+    state.error = error?.message || String(error);
+    renderProviderOptions();
+  }
 }
 
 async function startPreview(type) {
@@ -199,6 +221,7 @@ async function restoreImportedLibrary() {
 
     state.libraryDocuments = restored.documents.map((documentItem) => ({
       ...documentItem,
+      memoryOutline: Array.isArray(documentItem.memoryOutline) ? [...documentItem.memoryOutline] : [],
       sourceTexts: Array.isArray(documentItem.sourceTexts) ? [...documentItem.sourceTexts] : [],
     }));
     state.result = buildAccumulatedLibraryResult();
@@ -242,6 +265,8 @@ async function runImportQueue() {
         continue;
       }
 
+      state.processingPath = pending.path;
+      render();
       const processed = await api.processDocument(pending.path, pending.relativePath);
       applyProcessedDocument(index, processed);
       render();
@@ -251,6 +276,7 @@ async function runImportQueue() {
   } catch (error) {
     state.error = error?.message || String(error);
   } finally {
+    state.processingPath = "";
     state.busy = false;
     render();
   }
@@ -268,6 +294,7 @@ async function retrySelectedDocument() {
 
   state.busy = true;
   state.error = "";
+  state.processingPath = selected.path;
   state.result.failed = Math.max(0, state.result.failed - 1);
   state.result.documents[state.selectedIndex] = {
     ...selected,
@@ -286,6 +313,7 @@ async function retrySelectedDocument() {
     state.result.documents[state.selectedIndex] = selected;
     state.result.failed += 1;
   } finally {
+    state.processingPath = "";
     state.busy = false;
     render();
   }
@@ -443,7 +471,7 @@ function render() {
   const selected = getSelectedDocument();
   const mobileSidebarActive = state.mobileSidebarOpen && window.innerWidth <= 1100;
 
-  elements.toolbarMeta.textContent = state.error || toolbarText();
+  renderProviderOptions();
   elements.sidebarStatus.textContent = buildSidebarStatus();
   document.body.classList.toggle("sidebar-open", mobileSidebarActive);
   elements.sidebarToggleButton.classList.toggle("hidden", window.innerWidth > 1100);
@@ -462,7 +490,6 @@ function render() {
   }
 
   elements.summaryTitle.textContent = summaryTitle();
-  elements.summaryTarget.textContent = state.result.target;
 
   const hint = summaryHintText();
   elements.summaryHint.classList.toggle("hidden", hint === "");
@@ -483,13 +510,41 @@ function render() {
   renderDetail(selected);
 }
 
+function renderProviderOptions() {
+  const options =
+    state.agentSettings.options.length > 0
+      ? state.agentSettings.options
+      : [
+          { value: "deepseek", label: "DeepSeek", enabled: true },
+          { value: "modelscope", label: "魔塔", enabled: false },
+        ];
+
+  elements.providerSelect.innerHTML = "";
+  options.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.enabled ? item.label : `${item.label}（未配置）`;
+    option.disabled = !item.enabled;
+    option.selected = item.value === state.selectedProvider;
+    elements.providerSelect.appendChild(option);
+  });
+
+  if (![...elements.providerSelect.options].some((item) => item.selected)) {
+    const fallback = options.find((item) => item.enabled)?.value || "deepseek";
+    state.selectedProvider = fallback;
+    elements.providerSelect.value = fallback;
+  }
+}
+
 function renderEmptyDetail() {
+  setAnswerLoading(false);
   elements.detailMainLabel.textContent = "标准答案";
-  elements.detailTitle.textContent = "选择一个问题开始";
+  elements.detailTitle.textContent = "选择一篇文档开始";
   elements.detailStatus.textContent = "未开始";
   elements.detailMeta.textContent = "";
-  setPlainContent(elements.detailAnswer, "导入完成后，选中左侧任意题目即可阅读题卡。");
+  setPlainContent(elements.detailAnswer, "导入完成后，选中文档即可查看整理后的题卡。");
   elements.detailCacheTag.classList.add("hidden");
+  elements.outlinePanel.classList.add("hidden");
   elements.sourceToggle.classList.add("hidden");
   elements.sourcesPanel.classList.add("hidden");
   elements.errorPanel.classList.add("hidden");
@@ -512,9 +567,24 @@ function renderDetail(selected) {
   elements.previewWarning.classList.add("hidden");
   elements.previewConfirmActions.classList.add("hidden");
 
+  if (state.phase === "processing" && state.processingPath === selected.path) {
+    setAnswerLoading(true);
+    setPlainContent(
+      elements.detailAnswer,
+      `正在调用 ${providerLabel(state.selectedProvider)} 整理这篇文档，耗时取决于模型响应速度，请稍候。`,
+    );
+    elements.errorPanel.classList.add("hidden");
+    elements.outlinePanel.classList.add("hidden");
+    elements.sourceToggle.classList.add("hidden");
+    elements.sourcesPanel.classList.add("hidden");
+    return;
+  }
+
   if (selected.status === "pending") {
+    setAnswerLoading(false);
     setPlainContent(elements.detailAnswer, "这篇文档尚未导入。");
     elements.detailCacheTag.classList.add("hidden");
+    elements.outlinePanel.classList.add("hidden");
     elements.sourceToggle.classList.add("hidden");
     elements.sourcesPanel.classList.add("hidden");
     elements.errorPanel.classList.add("hidden");
@@ -522,22 +592,28 @@ function renderDetail(selected) {
   }
 
   if (selected.status === "ready") {
+    setAnswerLoading(false);
     renderMarkdownContent(elements.detailAnswer, selected.cardAnswer || "暂无答案", selected.path);
     elements.errorPanel.classList.add("hidden");
+    renderOutline(selected.memoryOutline || []);
     renderSources(selected.sourceTexts || [], selected.path);
     return;
   }
 
+  setAnswerLoading(false);
   setPlainContent(elements.detailAnswer, "这篇文档本次未能生成题卡。");
   elements.detailError.textContent = selected.error || "未知错误";
   elements.errorPanel.classList.remove("hidden");
+  elements.outlinePanel.classList.add("hidden");
   elements.sourceToggle.classList.add("hidden");
   elements.sourcesPanel.classList.add("hidden");
 }
 
 function renderPreviewDetail(selected) {
+  setAnswerLoading(false);
   elements.detailMainLabel.textContent = "归一化预览";
   elements.detailCacheTag.classList.add("hidden");
+  elements.outlinePanel.classList.add("hidden");
   elements.sourceToggle.classList.add("hidden");
   elements.sourcesPanel.classList.add("hidden");
   elements.errorPanel.classList.add("hidden");
@@ -546,17 +622,17 @@ function renderPreviewDetail(selected) {
   if (!preview) {
     elements.previewWarning.classList.add("hidden");
     elements.previewConfirmActions.classList.add("hidden");
-    setPlainContent(elements.detailAnswer, "正在加载归一化预览...");
+    setPlainContent(elements.detailAnswer, "正在加载预览...");
     return;
   }
 
   elements.detailMeta.textContent = [selected.relativePath, `编码：${preview.encoding}`]
     .filter(Boolean)
-    .join(" · ");
+    .join(" 路 ");
   renderMarkdownContent(elements.detailAnswer, preview.normalizedBody || "正文为空，无法预览。", selected.path);
 
   if (preview.suspectedGarbled) {
-    elements.previewWarning.textContent = preview.warning || "检测到疑似乱码，请人工确认后再导入。";
+    elements.previewWarning.textContent = preview.warning || "检测到疑似乱码，请确认后再导入。";
     elements.previewWarning.classList.remove("hidden");
     elements.previewConfirmActions.classList.remove("hidden");
     elements.confirmDocumentButton.textContent = isPreviewConfirmed(selected.path, preview)
@@ -575,7 +651,7 @@ function renderList() {
   if (documents.length === 0) {
     const empty = document.createElement("div");
     empty.className = "sidebar__path";
-    empty.textContent = state.busy ? "处理中..." : "导入后这里会显示题目列表";
+    empty.textContent = state.busy ? "处理中..." : "导入后这里会显示文档列表";
     elements.list.appendChild(empty);
     return;
   }
@@ -595,7 +671,7 @@ function renderList() {
 
     const path = document.createElement("span");
     path.className = "sidebar__path";
-    path.textContent = `${documentItem.relativePath || documentItem.path || ""} · ${statusLabel(documentItem.status, documentItem.path)}`;
+    path.textContent = statusLabel(documentItem.status, documentItem.path);
 
     button.append(title, path);
     elements.list.appendChild(button);
@@ -623,6 +699,26 @@ function renderSources(sourceTexts, documentPath) {
   });
 }
 
+function renderOutline(memoryOutline) {
+  if (!Array.isArray(memoryOutline) || memoryOutline.length === 0) {
+    elements.outlinePanel.classList.add("hidden");
+    elements.detailOutline.innerHTML = "";
+    return;
+  }
+
+  elements.outlinePanel.classList.remove("hidden");
+  elements.detailOutline.innerHTML = "";
+
+  const list = document.createElement("ul");
+  list.className = "outline__list";
+  memoryOutline.forEach((item) => {
+    const listItem = document.createElement("li");
+    listItem.textContent = item;
+    list.appendChild(listItem);
+  });
+  elements.detailOutline.appendChild(list);
+}
+
 function renderMarkdownContent(element, markdown, documentPath) {
   element.innerHTML = renderMarkdownToHtml(markdown, { documentPath });
 }
@@ -631,18 +727,8 @@ function setPlainContent(element, text) {
   element.textContent = text;
 }
 
-function toolbarText() {
-  if (state.phase === "preview") {
-    const unconfirmed = unconfirmedSuspiciousCount();
-    if (unconfirmed > 0) {
-      return `本批中还有 ${unconfirmed} 篇疑似乱码文档待逐篇确认`;
-    }
-    return "预览归一化结果，确认后开始导入已确认文档";
-  }
-  if (state.busy) {
-    return "正在整理题卡，请稍候...";
-  }
-  return "支持 Markdown，保持原始目录结构";
+function setAnswerLoading(isLoading) {
+  elements.detailAnswer.classList.toggle("answer--loading", isLoading);
 }
 
 function summaryTitle() {
@@ -665,7 +751,7 @@ function summaryHintText() {
     return "";
   }
   const unconfirmed = unconfirmedSuspiciousCount();
-  return `本批中有 ${suspicious} 篇文档命中疑似乱码检测，当前还有 ${unconfirmed} 篇未确认。只有点过“确认该文档可导入”的文件才会进入导入队列。`;
+  return `本批次有 ${suspicious} 篇文档命中疑似乱码检测，当前还有 ${unconfirmed} 篇未确认。只有确认可导入的文档才会进入导入队列。`;
 }
 
 function confirmButtonText() {
@@ -683,6 +769,10 @@ function buildSidebarStatus() {
     return `预览 ${state.result.total} 篇文档，可导入 ${importablePreviewCount()} 篇`;
   }
   if (state.busy && state.result) {
+    const current = currentProcessingLabel();
+    if (current) {
+      return `正在整理题卡：${state.result.ready + state.result.failed}/${state.result.total} · ${current}`;
+    }
     return `正在整理题卡：${state.result.ready + state.result.failed}/${state.result.total}`;
   }
   if (state.busy) {
@@ -702,7 +792,21 @@ function buildMeta(selected) {
   if (selected.encoding) {
     parts.push(`编码：${selected.encoding}`);
   }
+  if (selected.provider) {
+    parts.push(`Agent：${providerLabel(selected.provider)}`);
+  }
+  if (selected.model) {
+    parts.push(`模型：${selected.model}`);
+  }
   return parts.join(" · ");
+}
+
+function providerLabel(provider) {
+  const option = state.agentSettings.options.find((item) => item.value === provider);
+  if (option) {
+    return option.label;
+  }
+  return provider || "未配置";
 }
 
 function getSelectedDocument() {
@@ -767,11 +871,10 @@ function toggleBusyState(isBusy) {
     elements.sidebarToggleButton,
     elements.importFileButton,
     elements.importDirectoryButton,
-    elements.heroImportFile,
-    elements.heroImportDirectory,
+    elements.providerSelect,
     elements.retryDocumentButton,
     elements.confirmDocumentButton,
-  ].forEach((button) => {
+  ].filter(Boolean).forEach((button) => {
     button.disabled = isBusy;
   });
 
@@ -798,6 +901,14 @@ function statusLabel(status, path = "") {
     default:
       return "未开始";
   }
+}
+
+function currentProcessingLabel() {
+  if (!state.result || !state.processingPath) {
+    return "";
+  }
+  const current = state.result.documents.find((item) => item.path === state.processingPath);
+  return current?.title || current?.relativePath || "";
 }
 
 function syncResponsiveState() {
@@ -854,24 +965,27 @@ function mockPreviewDocument(path) {
       encoding: "utf-8",
       fingerprint: "preview-cache-v1",
       normalizedBody:
-        "版本化缓存键把文件指纹和 parser、segment、generator 的规则版本一起纳入缓存命中条件，避免规则升级后继续读到旧题卡。",
+        "版本化缓存键会把文档指纹、provider、模型和 prompt 版本一起纳入缓存命中条件，避免升级后继续读到旧题卡。",
       suspectedGarbled: false,
       warning: "",
     },
     "broken/empty.md": {
       path,
       title: "乱码示例",
-      encoding: "utf-8",
-      fingerprint: "preview-garbled-v1",
-      normalizedBody: "Go 鐨勭嚎绋嬫ā鍨嬫槸浠€涔堬紵\n杩欐槸涓€娈电枒浼间贡鐮佺殑鍐呭銆",
+      encoding: "gb18030",
+      fingerprint: "preview-broken-v1",
+      normalizedBody: "这是一份疑似乱码文档，需要人工确认后才能导入。",
       suspectedGarbled: true,
-      warning: "文本中包含多处常见乱码字形，请先核对归一化结果。",
+      warning: "检测到疑似乱码，请先确认内容是否可读。",
     },
   };
+
   return Promise.resolve(fixtures[path]);
 }
 
-function mockProcessDocument(path, relativePath) {
+function mockProcessDocument(path, relativePath, provider) {
+  const activeProvider = provider || "deepseek";
+  const activeModel = activeProvider === "modelscope" ? "qwen-plus" : "deepseek-chat";
   const fixtures = {
     "runtime/gmp.md": {
       title: "Go 的 GMP 模型是什么？",
@@ -880,8 +994,11 @@ function mockProcessDocument(path, relativePath) {
       status: "ready",
       fromCache: false,
       encoding: "utf-8",
+      provider: activeProvider,
+      model: activeModel,
+      memoryOutline: ["先说定义", "再说三者分工", "最后落到调度收益"],
       cardAnswer:
-        "GMP 是 Go 的调度模型，G 表示 goroutine，M 表示线程，P 表示处理器上下文。它的目标是把大量 goroutine 高效映射到更少的线程上执行。",
+        "GMP 是 Go 的调度模型，核心是把 goroutine、线程和处理器上下文拆成 G、M、P 三个角色。这样 Go 在用户态就能更高效地调度大量 goroutine，把它们映射到更少的线程上执行，既降低线程切换成本，也让并发程序更容易写和扩展。",
       sourceTexts: [
         "GMP 是 Go 的调度模型，G 表示 goroutine，M 表示线程，P 表示处理器上下文。",
         "它的目标是把大量 goroutine 高效映射到更少的线程上执行。",
@@ -894,10 +1011,14 @@ function mockProcessDocument(path, relativePath) {
       status: "ready",
       fromCache: true,
       encoding: "utf-8",
+      provider: activeProvider,
+      model: activeModel,
+      memoryOutline: ["缓存键必须可区分", "升级后不能读脏数据", "provider 和 prompt 都要入键"],
       cardAnswer:
-        "版本化缓存键把文件指纹和 parser、segment、generator 的规则版本一起纳入缓存命中条件，避免规则升级后继续读到旧题卡。",
+        "版本化缓存键的目的，是把文档内容和生成规则一起纳入缓存命中条件。这样 parser、segment、provider、模型或者 prompt 一旦变化，就会重新生成题卡，避免新链路读到旧结果，保证导入结果和当前实现严格对应。",
       sourceTexts: [
-        "缓存键不仅要包含文件内容变化，还要包含生成规则版本，才能避免静默脏缓存。",
+        "版本化缓存键会把文档指纹、provider、模型和 prompt 版本一起纳入缓存命中条件。",
+        "这样可以避免升级后继续读到旧题卡。",
       ],
     },
     "broken/empty.md": {
@@ -911,6 +1032,16 @@ function mockProcessDocument(path, relativePath) {
   return Promise.resolve(fixtures[relativePath] || fixtures[path]);
 }
 
+function mockAgentSettings() {
+  return Promise.resolve({
+    defaultProvider: "deepseek",
+    options: [
+      { value: "deepseek", label: "DeepSeek", enabled: true },
+      { value: "modelscope", label: "魔塔", enabled: true },
+    ],
+  });
+}
+
 setupEvents();
 render();
-void restoreImportedLibrary();
+void restoreAgentSettings().then(() => restoreImportedLibrary());
