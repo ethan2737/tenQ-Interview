@@ -1,27 +1,32 @@
-# notes
-docs-go/
-docs/
+# Environment variables
+.env
+
+# Project-local caches and generated runtime state
+.cache/
 .gocache/
-.omc/
 .gopath/
-build/
-frontend/node_modules/
+.gstack/
+.omc/
+.worktrees/
+coverage.out
+
+# Build outputs
+build/bin/
 frontend/dist/
+frontend/node_modules/
 frontend/wailsjs/
 
-# local editor files
+# Local content and scratch data
+docs/
+docs-go/
+
+# Editor and OS files
 .idea/
 .vscode/
 .DS_Store
+Thumbs.db
+Desktop.ini
 
-# local reports
-coverage.out
-
-# local agent instructions
-.gstack/
-.worktrees/
+# Local agent instructions
 AGENTS.md
 CLAUDE.md
-
-# environment variables
-.env
