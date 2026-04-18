@@ -542,3 +542,75 @@ func TestExportDocumentMarkdownRejectsTitleWithoutNumber(t *testing.T) {
 		t.Fatalf("expected export to fail when title has no number")
 	}
 }
+
+func TestExportMarkdownDocumentPathUsesDocumentFileName(t *testing.T) {
+	t.Parallel()
+
+	got, err := ExportMarkdownDocumentPath(`E:\Project\exports`)
+	if err != nil {
+		t.Fatalf("ExportMarkdownDocumentPath returned error: %v", err)
+	}
+
+	want := filepath.Join(`E:\Project\exports`, "document.md")
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestExportDocumentsMarkdownMergesAndSortsEntries(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outputPath := filepath.Join(root, "document.md")
+	service := NewService()
+
+	if err := service.ExportDocumentsMarkdown([]MarkdownExportDocument{
+		{Title: "第3题 GMP 是什么？", Answer: "第三题答案"},
+	}, outputPath); err != nil {
+		t.Fatalf("first batch export returned error: %v", err)
+	}
+
+	if err := service.ExportDocumentsMarkdown([]MarkdownExportDocument{
+		{Title: "第1题 Channel 是什么？", Answer: "第一题答案"},
+		{Title: "第3题 GMP 是什么？", Answer: "第三题新答案"},
+	}, outputPath); err != nil {
+		t.Fatalf("second batch export returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read export file: %v", err)
+	}
+
+	content := string(raw)
+	firstIndex := strings.Index(content, "## 1. 第1题 Channel 是什么？")
+	secondIndex := strings.Index(content, "## 3. 第3题 GMP 是什么？")
+	if firstIndex == -1 || secondIndex == -1 {
+		t.Fatalf("expected merged entries to exist, got %q", content)
+	}
+	if firstIndex > secondIndex {
+		t.Fatalf("expected merged entries to stay sorted, got %q", content)
+	}
+	if !strings.Contains(content, "第三题新答案") {
+		t.Fatalf("expected latest answer to overwrite existing entry, got %q", content)
+	}
+	if strings.Contains(content, "第三题答案") {
+		t.Fatalf("expected stale answer to be replaced, got %q", content)
+	}
+}
+
+func TestExportDocumentsMarkdownFailsWhenAnyTitleHasNoNumber(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outputPath := filepath.Join(root, "document.md")
+	service := NewService()
+
+	err := service.ExportDocumentsMarkdown([]MarkdownExportDocument{
+		{Title: "第2题 原始标题", Answer: "答案"},
+		{Title: "没有序号的标题", Answer: "答案"},
+	}, outputPath)
+	if err == nil {
+		t.Fatalf("expected batch export to fail when a title has no number")
+	}
+}

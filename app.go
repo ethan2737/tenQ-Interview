@@ -136,6 +136,13 @@ func (a *App) ExportDocumentMarkdown(title string, answer string, outputPath str
 	return a.service.ExportDocumentMarkdown(title, answer, outputPath)
 }
 
+func (a *App) ExportDocumentsMarkdown(documents []workbench.MarkdownExportDocument, outputPath string) error {
+	if err := a.ready(); err != nil {
+		return err
+	}
+	return a.service.ExportDocumentsMarkdown(documents, outputPath)
+}
+
 func (a *App) ready() error {
 	if a.startupErr != nil {
 		return a.startupErr

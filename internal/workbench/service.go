@@ -132,6 +132,11 @@ type markdownExportEntry struct {
 	Answer   string `json:"answer"`
 }
 
+type MarkdownExportDocument struct {
+	Title  string `json:"title"`
+	Answer string `json:"answer"`
+}
+
 func newService(store *cache.Store, cachePath string) *Service {
 	return &Service{
 		processor:    pipeline.NewProcessor(),
@@ -394,13 +399,30 @@ func (s *Service) ClearImportedDocuments() error {
 }
 
 func (s *Service) ExportDocumentMarkdown(title string, answer string, outputPath string) error {
+	return s.ExportDocumentsMarkdown([]MarkdownExportDocument{
+		{
+			Title:  title,
+			Answer: answer,
+		},
+	}, outputPath)
+}
+
+func (s *Service) ExportDocumentsMarkdown(documents []MarkdownExportDocument, outputPath string) error {
 	if strings.TrimSpace(outputPath) == "" {
 		return errors.New("output path is required")
 	}
 
-	entry, err := newMarkdownExportEntry(title, answer)
-	if err != nil {
-		return err
+	if len(documents) == 0 {
+		return errors.New("at least one document is required")
+	}
+
+	newEntries := make([]markdownExportEntry, 0, len(documents))
+	for _, document := range documents {
+		entry, err := newMarkdownExportEntry(document.Title, document.Answer)
+		if err != nil {
+			return err
+		}
+		newEntries = append(newEntries, entry)
 	}
 
 	entries, err := loadMarkdownExportEntries(outputPath)
@@ -408,14 +430,18 @@ func (s *Service) ExportDocumentMarkdown(title string, answer string, outputPath
 		return err
 	}
 
-	filtered := make([]markdownExportEntry, 0, len(entries)+1)
+	entryByIndex := make(map[int]markdownExportEntry, len(entries)+len(newEntries))
 	for _, item := range entries {
-		if item.Index == entry.Index {
-			continue
-		}
+		entryByIndex[item.Index] = item
+	}
+	for _, item := range newEntries {
+		entryByIndex[item.Index] = item
+	}
+
+	filtered := make([]markdownExportEntry, 0, len(entryByIndex))
+	for _, item := range entryByIndex {
 		filtered = append(filtered, item)
 	}
-	filtered = append(filtered, entry)
 
 	sort.Slice(filtered, func(i int, j int) bool {
 		if filtered[i].Index == filtered[j].Index {
@@ -429,6 +455,14 @@ func (s *Service) ExportDocumentMarkdown(title string, answer string, outputPath
 	}
 
 	return os.WriteFile(outputPath, buildMarkdownExportDocument(filtered), 0o600)
+}
+
+func ExportMarkdownDocumentPath(targetDir string) (string, error) {
+	trimmed := strings.TrimSpace(targetDir)
+	if trimmed == "" {
+		return "", errors.New("export directory is required")
+	}
+	return filepath.Join(trimmed, "document.md"), nil
 }
 
 func (s *Service) AgentSettings() AgentSettings {
