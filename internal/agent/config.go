@@ -2,10 +2,13 @@ package agent
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/encoding/unicode"
 )
 
 const (
@@ -107,16 +110,20 @@ func expandConfigRoots(rootDirs ...string) []string {
 }
 
 func loadDotEnv(path string) error {
-	file, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	decoded, err := decodeDotEnvBytes(raw)
+	if err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(decoded))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -134,6 +141,27 @@ func loadDotEnv(path string) error {
 	}
 
 	return scanner.Err()
+}
+
+func decodeDotEnvBytes(raw []byte) (string, error) {
+	switch {
+	case bytes.HasPrefix(raw, []byte{0xEF, 0xBB, 0xBF}):
+		return string(raw[3:]), nil
+	case bytes.HasPrefix(raw, []byte{0xFF, 0xFE}):
+		decoded, err := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).NewDecoder().Bytes(raw)
+		if err != nil {
+			return "", err
+		}
+		return string(decoded), nil
+	case bytes.HasPrefix(raw, []byte{0xFE, 0xFF}):
+		decoded, err := unicode.UTF16(unicode.BigEndian, unicode.UseBOM).NewDecoder().Bytes(raw)
+		if err != nil {
+			return "", err
+		}
+		return string(decoded), nil
+	default:
+		return string(raw), nil
+	}
 }
 
 func envOrDefault(key string, fallback string) string {

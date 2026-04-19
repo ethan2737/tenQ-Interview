@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -31,7 +32,12 @@ func (a *App) startup(ctx context.Context) {
 		exeDir = filepath.Dir(exePath)
 	}
 
-	service, err := workbench.NewServiceWithOptions(defaultCachePath(), exeDir, cwd)
+	userConfigDir := ""
+	if configDir, configErr := os.UserConfigDir(); configErr == nil {
+		userConfigDir = filepath.Join(configDir, "tenq-interview")
+	}
+
+	service, err := workbench.NewServiceWithOptions(defaultCachePath(), configRootsFor(cwd, exeDir, userConfigDir, os.Getenv("TENQ_INTERVIEW_CONFIG_DIR"))...)
 	if err != nil {
 		a.startupErr = err
 		return
@@ -159,4 +165,27 @@ func defaultCachePath() string {
 		workingDir = "."
 	}
 	return filepath.Join(workingDir, ".cache", "tenq-interview", "index.json")
+}
+
+func configRootsFor(cwd string, exeDir string, userConfigDir string, explicitConfigDir string) []string {
+	candidates := []string{
+		strings.TrimSpace(explicitConfigDir),
+		strings.TrimSpace(exeDir),
+		strings.TrimSpace(cwd),
+		strings.TrimSpace(userConfigDir),
+	}
+
+	roots := make([]string, 0, len(candidates))
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if _, exists := seen[candidate]; exists {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		roots = append(roots, candidate)
+	}
+	return roots
 }

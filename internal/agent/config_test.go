@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/text/encoding/unicode"
 )
 
 func clearAgentEnv(t *testing.T) {
@@ -94,5 +96,29 @@ func TestLoadConfigFindsDotEnvInParentDirectory(t *testing.T) {
 	}
 	if cfg.DeepSeek.APIKey != "parent-key" {
 		t.Fatalf("expected parent config to be loaded, got %q", cfg.DeepSeek.APIKey)
+	}
+}
+
+func TestLoadConfigReadsUTF16DotEnv(t *testing.T) {
+	clearAgentEnv(t)
+	root := t.TempDir()
+	content := "LLM_PROVIDER_DEFAULT=deepseek\nDEEPSEEK_API_KEY=utf16-key\nDEEPSEEK_MODEL=deepseek-chat\n"
+	encoded, err := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).NewEncoder().Bytes([]byte(content))
+	if err != nil {
+		t.Fatalf("failed to encode .env as utf16: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".env"), encoded, 0o600); err != nil {
+		t.Fatalf("failed to write utf16 .env: %v", err)
+	}
+
+	cfg, err := LoadConfigFromEnv(root)
+	if err != nil {
+		t.Fatalf("LoadConfigFromEnv returned error: %v", err)
+	}
+	if cfg.DefaultProvider != ProviderDeepSeek {
+		t.Fatalf("unexpected provider: %q", cfg.DefaultProvider)
+	}
+	if cfg.DeepSeek.APIKey != "utf16-key" {
+		t.Fatalf("expected utf16 api key to be loaded, got %q", cfg.DeepSeek.APIKey)
 	}
 }
