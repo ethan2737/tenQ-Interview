@@ -414,7 +414,7 @@ func (s *Service) ListImportedDocuments() (ImportResult, error) {
 		if documents[i].Title == documents[j].Title {
 			return documents[i].Path < documents[j].Path
 		}
-		return documents[i].Title < documents[j].Title
+		return compareDocumentTitles(documents[i].Title, documents[j].Title)
 	})
 
 	return ImportResult{
@@ -609,6 +609,38 @@ func fingerprint(raw []byte) string {
 
 func trimExtension(name string) string {
 	return name[:len(name)-len(filepath.Ext(name))]
+}
+
+// compareDocumentTitles 比较两个文档标题，实现自然排序
+// 支持 "1-1"、"1-2"、"2-1" 这样的编号格式
+// 先按第一个数字排序，再按第二个数字排序
+func compareDocumentTitles(a, b string) bool {
+	partsA := parseTitleNumber(a)
+	partsB := parseTitleNumber(b)
+
+	for i := 0; i < len(partsA) && i < len(partsB); i++ {
+		if partsA[i] != partsB[i] {
+			return partsA[i] < partsB[i]
+		}
+	}
+	return len(partsA) < len(partsB)
+}
+
+// parseTitleNumber 从标题中提取数字序列
+// 例如："11-3 MySQL 的 redo log" -> [11, 3]
+// "2-7.遇到回答不上来" -> [2, 7]
+func parseTitleNumber(title string) []int {
+	var numbers []int
+	re := regexp.MustCompile(`(\d+)`)
+	matches := re.FindAllStringSubmatch(title, -1)
+	for _, match := range matches {
+		if len(match) > 1 {
+			var num int
+			fmt.Sscanf(match[1], "%d", &num)
+			numbers = append(numbers, num)
+		}
+	}
+	return numbers
 }
 
 func newMarkdownExportEntry(title string, answer string) (markdownExportEntry, error) {
