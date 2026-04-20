@@ -614,3 +614,64 @@ func TestExportDocumentsMarkdownFailsWhenAnyTitleHasNoNumber(t *testing.T) {
 		t.Fatalf("expected batch export to fail when a title has no number")
 	}
 }
+
+func TestExportDocumentsMarkdownKeepsDistinctCompoundNumbers(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outputPath := filepath.Join(root, "document.md")
+	service := NewService()
+
+	err := service.ExportDocumentsMarkdown([]MarkdownExportDocument{
+		{Title: "4-25. interface 可以比较吗？", Answer: "答案 A"},
+		{Title: "4-17. 哪些类型可以使用 len 和 cap？", Answer: "答案 B"},
+		{Title: "2-9. 面试前如何准备？", Answer: "答案 C"},
+	}, outputPath)
+	if err != nil {
+		t.Fatalf("batch export returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read export file: %v", err)
+	}
+
+	content := string(raw)
+	if strings.Count(content, "## ") != 3 {
+		t.Fatalf("expected 3 exported entries, got %q", content)
+	}
+	if !strings.Contains(content, "4-25. interface 可以比较吗？") {
+		t.Fatalf("expected first compound number title to be kept, got %q", content)
+	}
+	if !strings.Contains(content, "4-17. 哪些类型可以使用 len 和 cap？") {
+		t.Fatalf("expected second compound number title to be kept, got %q", content)
+	}
+	if !strings.Contains(content, "2-9. 面试前如何准备？") {
+		t.Fatalf("expected third compound number title to be kept, got %q", content)
+	}
+}
+
+func TestExportDocumentsMarkdownOmitsHiddenMetadataComments(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outputPath := filepath.Join(root, "document.md")
+	service := NewService()
+
+	err := service.ExportDocumentsMarkdown([]MarkdownExportDocument{
+		{Title: "4-25. interface 可以比较吗？", Answer: "答案 A"},
+	}, outputPath)
+	if err != nil {
+		t.Fatalf("batch export returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read export file: %v", err)
+	}
+
+	content := string(raw)
+	if strings.Contains(content, "TENQ_EXPORT_ENTRY") {
+		t.Fatalf("expected export to omit hidden metadata comments, got %q", content)
+	}
+}

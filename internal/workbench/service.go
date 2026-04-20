@@ -126,7 +126,7 @@ func NewServiceWithOptions(cachePath string, configRoots ...string) (*Service, e
 }
 
 type markdownExportEntry struct {
-	Index    int    `json:"index"`
+	OrderKey string `json:"orderKey,omitempty"`
 	Title    string `json:"title"`
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
@@ -430,24 +430,24 @@ func (s *Service) ExportDocumentsMarkdown(documents []MarkdownExportDocument, ou
 		return err
 	}
 
-	entryByIndex := make(map[int]markdownExportEntry, len(entries)+len(newEntries))
+	entryByOrderKey := make(map[string]markdownExportEntry, len(entries)+len(newEntries))
 	for _, item := range entries {
-		entryByIndex[item.Index] = item
+		entryByOrderKey[item.OrderKey] = item
 	}
 	for _, item := range newEntries {
-		entryByIndex[item.Index] = item
+		entryByOrderKey[item.OrderKey] = item
 	}
 
-	filtered := make([]markdownExportEntry, 0, len(entryByIndex))
-	for _, item := range entryByIndex {
+	filtered := make([]markdownExportEntry, 0, len(entryByOrderKey))
+	for _, item := range entryByOrderKey {
 		filtered = append(filtered, item)
 	}
 
 	sort.Slice(filtered, func(i int, j int) bool {
-		if filtered[i].Index == filtered[j].Index {
+		if compareOrderingKeys(filtered[i].OrderKey, filtered[j].OrderKey) == 0 {
 			return filtered[i].Title < filtered[j].Title
 		}
-		return filtered[i].Index < filtered[j].Index
+		return compareOrderingKeys(filtered[i].OrderKey, filtered[j].OrderKey) < 0
 	})
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
@@ -517,23 +517,18 @@ func newMarkdownExportEntry(title string, answer string) (markdownExportEntry, e
 		return markdownExportEntry{}, errors.New("document title is required")
 	}
 
-	match := titleNumberPattern.FindString(trimmedTitle)
-	if match == "" {
-		return markdownExportEntry{}, errors.New("document title must contain an ordering number")
-	}
-
 	trimmedAnswer := strings.TrimSpace(answer)
 	if trimmedAnswer == "" {
 		return markdownExportEntry{}, errors.New("document answer is empty")
 	}
 
-	var index int
-	if _, err := fmt.Sscanf(match, "%d", &index); err != nil || index <= 0 {
-		return markdownExportEntry{}, errors.New("document title contains an invalid ordering number")
+	orderKey, err := extractOrderKey(trimmedTitle)
+	if err != nil {
+		return markdownExportEntry{}, err
 	}
 
 	return markdownExportEntry{
-		Index:    index,
+		OrderKey: orderKey,
 		Title:    trimmedTitle,
 		Question: trimmedTitle,
 		Answer:   trimmedAnswer,
@@ -571,14 +566,21 @@ func loadMarkdownExportEntries(outputPath string) ([]markdownExportEntry, error)
 		if err := json.Unmarshal(decoded, &entry); err != nil {
 			return nil, fmt.Errorf("parse export entry: %w", err)
 		}
+		if entry.OrderKey == "" {
+			orderKey, orderErr := extractOrderKey(entry.Title)
+			if orderErr != nil {
+				return nil, orderErr
+			}
+			entry.OrderKey = orderKey
+		}
 		entries = append(entries, entry)
 	}
 
-	if len(entries) == 0 {
-		return nil, errors.New("existing export file is not a TenQ markdown export")
+	if len(entries) > 0 {
+		return entries, nil
 	}
 
-	return entries, nil
+	return parseMarkdownExportEntries(content)
 }
 
 func buildMarkdownExportDocument(entries []markdownExportEntry) []byte {
@@ -587,19 +589,14 @@ func buildMarkdownExportDocument(entries []markdownExportEntry) []byte {
 	builder.WriteString("> 由 TenQ Interview 导出，所有题目按标题中的序号排序。\n\n")
 
 	for index, entry := range entries {
-		payload, _ := json.Marshal(entry)
-		builder.WriteString("<!-- TENQ_EXPORT_ENTRY ")
-		builder.WriteString(base64.StdEncoding.EncodeToString(payload))
-		builder.WriteString(" -->\n")
 		builder.WriteString("## ")
-		builder.WriteString(fmt.Sprintf("%d. %s", entry.Index, entry.Title))
+		builder.WriteString(fmt.Sprintf("%d. %s", displayOrderIndex(entry.OrderKey), entry.Title))
 		builder.WriteString("\n\n")
 		builder.WriteString("**问题**\n\n")
 		builder.WriteString(entry.Question)
 		builder.WriteString("\n\n")
 		builder.WriteString("**答案**\n\n")
 		builder.WriteString(entry.Answer)
-		builder.WriteString("\n\n<!-- /TENQ_EXPORT_ENTRY -->")
 		if index < len(entries)-1 {
 			builder.WriteString("\n\n")
 		}
@@ -607,4 +604,119 @@ func buildMarkdownExportDocument(entries []markdownExportEntry) []byte {
 
 	builder.WriteString("\n")
 	return builder.Bytes()
+}
+
+func extractOrderKey(title string) (string, error) {
+	matches := titleNumberPattern.FindAllString(strings.TrimSpace(title), -1)
+	if len(matches) == 0 {
+		return "", errors.New("document title must contain an ordering number")
+	}
+
+	parts := make([]string, 0, len(matches))
+	for _, match := range matches {
+		var value int
+		if _, err := fmt.Sscanf(match, "%d", &value); err != nil || value <= 0 {
+			return "", errors.New("document title contains an invalid ordering number")
+		}
+		parts = append(parts, fmt.Sprintf("%d", value))
+	}
+	return strings.Join(parts, "."), nil
+}
+
+func compareOrderingKeys(left string, right string) int {
+	leftParts := titleNumberPattern.FindAllString(left, -1)
+	rightParts := titleNumberPattern.FindAllString(right, -1)
+
+	limit := len(leftParts)
+	if len(rightParts) < limit {
+		limit = len(rightParts)
+	}
+
+	for index := 0; index < limit; index++ {
+		var leftValue int
+		var rightValue int
+		fmt.Sscanf(leftParts[index], "%d", &leftValue)
+		fmt.Sscanf(rightParts[index], "%d", &rightValue)
+		switch {
+		case leftValue < rightValue:
+			return -1
+		case leftValue > rightValue:
+			return 1
+		}
+	}
+
+	switch {
+	case len(leftParts) < len(rightParts):
+		return -1
+	case len(leftParts) > len(rightParts):
+		return 1
+	default:
+		return strings.Compare(left, right)
+	}
+}
+
+func displayOrderIndex(orderKey string) int {
+	parts := titleNumberPattern.FindAllString(orderKey, -1)
+	if len(parts) == 0 {
+		return 0
+	}
+
+	var value int
+	fmt.Sscanf(parts[0], "%d", &value)
+	return value
+}
+
+func parseMarkdownExportEntries(content string) ([]markdownExportEntry, error) {
+	sections := strings.Split(content, "\n## ")
+	if len(sections) == 0 {
+		return nil, errors.New("existing export file is not a TenQ markdown export")
+	}
+
+	entries := make([]markdownExportEntry, 0, len(sections))
+	for index, section := range sections {
+		if index == 0 {
+			headerIndex := strings.Index(section, "## ")
+			if headerIndex == -1 {
+				continue
+			}
+			section = section[headerIndex+3:]
+		}
+
+		section = strings.TrimSpace(section)
+		if section == "" {
+			continue
+		}
+
+		parts := strings.SplitN(section, "\n\n**问题**\n\n", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		answerParts := strings.SplitN(parts[1], "\n\n**答案**\n\n", 2)
+		if len(answerParts) != 2 {
+			continue
+		}
+
+		question := strings.TrimSpace(answerParts[0])
+		answer := strings.TrimSpace(answerParts[1])
+		title := question
+		if title == "" {
+			title = strings.TrimSpace(parts[0])
+		}
+
+		entry, err := newMarkdownExportEntry(title, answer)
+		if err != nil {
+			return nil, err
+		}
+		if question != "" {
+			entry.Question = question
+		}
+		entries = append(entries, entry)
+	}
+
+	if len(entries) == 0 {
+		return nil, errors.New("existing export file is not a TenQ markdown export")
+	}
+
+	return entries, nil
 }
