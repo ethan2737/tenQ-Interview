@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"tenq-interview/internal/agent"
+	"tenq-interview/internal/audio"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
@@ -28,6 +29,15 @@ func (s stubSummarizer) Summarize(ctx context.Context, req agent.SummarizeReques
 
 func (s stubSummarizer) ProviderModel() string { return s.model }
 func (s stubSummarizer) PromptVersion() string { return s.version }
+
+type stubInterviewAudioGenerator struct {
+	result audio.Result
+	err    error
+}
+
+func (s stubInterviewAudioGenerator) GenerateFromCache() (audio.Result, error) {
+	return s.result, s.err
+}
 
 func TestImportPathBuildsDocumentSummaries(t *testing.T) {
 	t.Parallel()
@@ -673,5 +683,94 @@ func TestExportDocumentsMarkdownOmitsHiddenMetadataComments(t *testing.T) {
 	content := string(raw)
 	if strings.Contains(content, "TENQ_EXPORT_ENTRY") {
 		t.Fatalf("expected export to omit hidden metadata comments, got %q", content)
+	}
+}
+
+func TestGenerateInterviewAudioFromCacheReturnsGeneratorResult(t *testing.T) {
+	previousFactory := newInterviewAudioGenerator
+	t.Cleanup(func() {
+		newInterviewAudioGenerator = previousFactory
+	})
+
+	newInterviewAudioGenerator = func(config audio.GeneratorConfig) interviewAudioGenerator {
+		if !strings.HasSuffix(config.CachePath, filepath.Join(".cache", "tenq-interview", "index.json")) {
+			t.Fatalf("unexpected cache path: %q", config.CachePath)
+		}
+		return stubInterviewAudioGenerator{
+			result: audio.Result{
+				OutputPath:       filepath.Join("E:\\Project\\Agent\\TenQ-Interview", ".cache", "tenq-interview", "audio", "session.wav"),
+				TotalEntries:     3,
+				GeneratedEntries: 2,
+				SkippedEntries:   1,
+				GeneratedAt:      "2026-04-20T16:00:00+08:00",
+				Backend:          "onnx",
+			},
+		}
+	}
+
+	service, err := NewServiceWithCache(filepath.Join("E:\\Project\\Agent\\TenQ-Interview", ".cache", "tenq-interview", "index.json"))
+	if err != nil {
+		t.Fatalf("NewServiceWithCache returned error: %v", err)
+	}
+
+	result, err := service.GenerateInterviewAudioFromCache()
+	if err != nil {
+		t.Fatalf("GenerateInterviewAudioFromCache returned error: %v", err)
+	}
+
+	if result.OutputPath == "" || result.GeneratedEntries != 2 || result.Backend != "onnx" {
+		t.Fatalf("unexpected audio generation result: %+v", result)
+	}
+}
+
+func TestCompareDocumentTitlesSortsNumerically(t *testing.T) {
+	tests := []struct {
+		a    string
+		b    string
+		want bool
+	}{
+		{"1-1 第一个问题", "1-2 第二个问题", true},
+		{"1-2 第二个问题", "1-10 第十个问题", true},
+		{"1-10 第十个问题", "2-1 新问题", true},
+		{"2-1 新问题", "11-3 MySQL 的 redo log", true},
+		{"11-3 MySQL 的 redo log", "11-10 另一个问题", true},
+		{"1-1", "1-2", true},
+		{"1-2", "1-10", true},
+		{"2-4", "10-1", true},
+		{"相同标题", "相同标题", false},
+	}
+
+	for _, tt := range tests {
+		got := compareDocumentTitles(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("compareDocumentTitles(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestParseTitleNumberExtractsDigits(t *testing.T) {
+	tests := []struct {
+		title string
+		want  []int
+	}{
+		{"1-1 第一个问题", []int{1, 1}},
+		{"11-3 MySQL 的 redo log", []int{11, 3}},
+		{"2-7.遇到回答不上来", []int{2, 7}},
+		{"第 100 题", []int{100}},
+		{"没有数字", []int{}},
+	}
+
+	for _, tt := range tests {
+		got := parseTitleNumber(tt.title)
+		if len(got) != len(tt.want) {
+			t.Errorf("parseTitleNumber(%q) = %v, want %v", tt.title, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("parseTitleNumber(%q) = %v, want %v", tt.title, got, tt.want)
+				break
+			}
+		}
 	}
 }

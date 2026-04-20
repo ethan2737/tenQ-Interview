@@ -88,6 +88,34 @@ func (a *App) AgentSettings() (workbench.AgentSettings, error) {
 	return a.service.AgentSettings(), nil
 }
 
+func (a *App) GenerateInterviewAudioFromCache() (workbench.AudioGenerationResult, error) {
+	if err := a.ready(); err != nil {
+		return workbench.AudioGenerationResult{}, err
+	}
+	return a.service.GenerateInterviewAudioFromCache()
+}
+
+func (a *App) StartInterviewAudioGenerationFromCache() (workbench.AudioGenerationStatus, error) {
+	if err := a.ready(); err != nil {
+		return workbench.AudioGenerationStatus{}, err
+	}
+	return a.service.StartInterviewAudioGenerationFromCache()
+}
+
+func (a *App) AudioGenerationStatus() (workbench.AudioGenerationStatus, error) {
+	if err := a.ready(); err != nil {
+		return workbench.AudioGenerationStatus{}, err
+	}
+	return a.service.AudioGenerationStatus(), nil
+}
+
+func (a *App) CancelInterviewAudioGeneration() (workbench.AudioGenerationStatus, error) {
+	if err := a.ready(); err != nil {
+		return workbench.AudioGenerationStatus{}, err
+	}
+	return a.service.CancelInterviewAudioGeneration()
+}
+
 func (a *App) ClearImportedDocuments() error {
 	if err := a.ready(); err != nil {
 		return err
@@ -160,11 +188,27 @@ func (a *App) ready() error {
 }
 
 func defaultCachePath() string {
-	workingDir, err := os.Getwd()
-	if err != nil || workingDir == "" {
-		workingDir = "."
+	return filepath.Join(defaultCacheBaseDir(), ".cache", "tenq-interview", "index.json")
+}
+
+func defaultCacheBaseDir() string {
+	executablePath, err := os.Executable()
+	if err == nil {
+		executableDir := strings.TrimSpace(filepath.Dir(executablePath))
+		if executableDir != "" {
+			return executableDir
+		}
 	}
-	return filepath.Join(workingDir, ".cache", "tenq-interview", "index.json")
+
+	workingDir, err := os.Getwd()
+	if err == nil {
+		workingDir = strings.TrimSpace(workingDir)
+		if workingDir != "" {
+			return workingDir
+		}
+	}
+
+	return "."
 }
 
 func configRootsFor(cwd string, exeDir string, userConfigDir string, explicitConfigDir string) []string {

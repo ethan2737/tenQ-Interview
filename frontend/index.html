@@ -45,6 +45,17 @@
             <label class="toolbar__select-wrap" for="provider-select">
               <select id="provider-select" class="toolbar__select" aria-label="Agent 接入方式"></select>
             </label>
+            <button
+              id="theme-toggle-button"
+              class="toolbar__button toolbar__button--theme"
+              type="button"
+              aria-pressed="false"
+              aria-label="切换黑夜"
+            >
+              切换黑夜
+            </button>
+            <button id="generate-audio-button" class="toolbar__button" type="button">生成音频</button>
+            <span id="audio-generation-status" class="toolbar__meta hidden" aria-live="polite"></span>
           </div>
         </header>
 
@@ -138,6 +149,7 @@
     <script src="./src/import-session.js"></script>
     <script src="./src/agent-options.js"></script>
     <script src="./src/markdown-render.js"></script>
+    <script src="./src/theme.js"></script>
     <script src="./src/app.js"></script>
   </body>
 </html>

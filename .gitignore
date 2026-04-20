@@ -32,3 +32,11 @@ AGENTS.md
 CLAUDE.md
 
 TTS-Nano/
+
+# TTS / Podcast feature
+internal/audio/
+scripts/
+test-results/
+frontend/src/audio-*.test.js
+*.pyc
+__pycache__/
