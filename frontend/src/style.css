@@ -2,16 +2,74 @@
   color-scheme: light;
   --canvas: #f5f1e8;
   --surface: #fbf8f2;
+  --surface-soft: rgba(255, 255, 255, 0.34);
   --surface-strong: rgba(251, 248, 242, 0.92);
+  --surface-muted: rgba(255, 255, 255, 0.28);
+  --surface-frosted: rgba(251, 248, 242, 0.84);
+  --surface-ghost: rgba(255, 255, 255, 0.38);
+  --surface-tag: rgba(255, 255, 255, 0.5);
   --ink: #1f2933;
   --muted: #667085;
   --border: #d9d2c3;
   --accent: #285e61;
   --accent-soft: rgba(40, 94, 97, 0.1);
   --accent-strong: rgba(40, 94, 97, 0.18);
+  --accent-outline: rgba(40, 94, 97, 0.42);
+  --warning: #8a5a1f;
+  --warning-border: rgba(192, 138, 62, 0.32);
+  --warning-soft: rgba(192, 138, 62, 0.12);
   --error: #b2544f;
+  --error-border: rgba(178, 84, 79, 0.22);
   --error-soft: rgba(178, 84, 79, 0.12);
+  --code-block: rgba(31, 41, 51, 0.06);
+  --code-inline: rgba(31, 41, 51, 0.08);
+  --background-radial: rgba(192, 138, 62, 0.16);
+  --background-gradient-start: #f7f2e7;
+  --background-gradient-end: #f2ede3;
+  --answer-loading: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.34),
+    rgba(40, 94, 97, 0.08),
+    rgba(255, 255, 255, 0.34)
+  );
   --shadow: 0 24px 60px rgba(31, 41, 51, 0.08);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #182220;
+  --surface: #22302d;
+  --surface-soft: rgba(45, 62, 58, 0.72);
+  --surface-strong: rgba(34, 48, 45, 0.94);
+  --surface-muted: rgba(42, 58, 54, 0.74);
+  --surface-frosted: rgba(34, 48, 45, 0.86);
+  --surface-ghost: rgba(53, 72, 67, 0.86);
+  --surface-tag: rgba(58, 79, 74, 0.92);
+  --ink: #e7e1d5;
+  --muted: #b1b8ae;
+  --border: #41514c;
+  --accent: #7fa49c;
+  --accent-soft: rgba(127, 164, 156, 0.18);
+  --accent-strong: rgba(127, 164, 156, 0.28);
+  --accent-outline: rgba(127, 164, 156, 0.48);
+  --warning: #d0b07b;
+  --warning-border: rgba(192, 138, 62, 0.34);
+  --warning-soft: rgba(192, 138, 62, 0.14);
+  --error: #e19a93;
+  --error-border: rgba(178, 84, 79, 0.28);
+  --error-soft: rgba(178, 84, 79, 0.16);
+  --code-block: rgba(11, 17, 16, 0.42);
+  --code-inline: rgba(11, 17, 16, 0.32);
+  --background-radial: rgba(192, 138, 62, 0.12);
+  --background-gradient-start: #1d2826;
+  --background-gradient-end: #141b1a;
+  --answer-loading: linear-gradient(
+    90deg,
+    rgba(45, 62, 58, 0.72),
+    rgba(127, 164, 156, 0.16),
+    rgba(45, 62, 58, 0.72)
+  );
+  --shadow: 0 28px 72px rgba(4, 8, 8, 0.34);
 }
 
 * {
@@ -30,8 +88,8 @@ body {
   font-family: "Source Han Sans SC", "Noto Sans SC", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(192, 138, 62, 0.16), transparent 28%),
-    linear-gradient(180deg, #f7f2e7 0%, #f2ede3 100%);
+    radial-gradient(circle at top left, var(--background-radial), transparent 28%),
+    linear-gradient(180deg, var(--background-gradient-start) 0%, var(--background-gradient-end) 100%);
 }
 
 button {
@@ -39,7 +97,7 @@ button {
 }
 
 button:focus-visible {
-  outline: 2px solid rgba(40, 94, 97, 0.42);
+  outline: 2px solid var(--accent-outline);
   outline-offset: 2px;
 }
 
@@ -63,7 +121,7 @@ button:focus-visible {
   height: 100vh;
   padding: 32px 24px;
   border-right: 1px solid var(--border);
-  background: rgba(251, 248, 242, 0.84);
+  background: var(--surface-frosted);
   backdrop-filter: blur(14px);
   overflow: hidden;
   transition: transform 180ms ease, opacity 180ms ease, visibility 180ms ease;
@@ -87,7 +145,7 @@ button:focus-visible {
   padding: 10px 12px;
   border: 1px dashed var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--surface-muted);
   font-size: 14px;
   color: var(--muted);
 }
@@ -98,7 +156,7 @@ button:focus-visible {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--surface-soft);
 }
 
 .sidebar__selection-toggle {
@@ -149,7 +207,7 @@ button:focus-visible {
 .sidebar__item:hover,
 .sidebar__item:focus-visible {
   border-color: var(--border);
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--surface-soft);
   outline: none;
 }
 
@@ -236,12 +294,19 @@ button:focus-visible {
   padding: 0 42px 0 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
+  color-scheme: light;
   background: var(--surface);
   color: var(--ink);
   font: inherit;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
+}
+
+.toolbar__select option {
+  color-scheme: light;
+  background: #fbf8f2;
+  color: #1f2933;
 }
 
 .toolbar__button {
@@ -258,16 +323,25 @@ button:focus-visible {
 }
 
 .toolbar__button--ghost {
-  background: rgba(255, 255, 255, 0.38);
+  background: var(--surface-ghost);
 }
 
 .toolbar__button--sidebar {
   display: none;
 }
 
+.toolbar__button--theme {
+  min-width: 112px;
+}
+
 .toolbar__button--primary {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.toolbar__button--active {
+  border-color: var(--accent);
+  background: var(--accent-strong);
 }
 
 .toolbar__button:disabled {
@@ -366,7 +440,7 @@ button:focus-visible {
 
 .summary__hint {
   margin: 6px 0 0;
-  color: #8a5a1f;
+  color: var(--warning);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -382,7 +456,7 @@ button:focus-visible {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--surface-soft);
 }
 
 .stat__label {
@@ -414,7 +488,7 @@ button:focus-visible {
   align-items: center;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--surface-tag);
   color: var(--muted);
   font-size: 13px;
 }
@@ -441,7 +515,7 @@ button:focus-visible {
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(31, 41, 51, 0.06);
+  background: var(--code-block);
 }
 
 .answer code,
@@ -454,7 +528,7 @@ button:focus-visible {
 .source :not(pre) > code {
   padding: 2px 6px;
   border-radius: 6px;
-  background: rgba(31, 41, 51, 0.08);
+  background: var(--code-inline);
 }
 
 .answer img,
@@ -494,7 +568,7 @@ button:focus-visible {
   padding: 18px 20px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--surface-soft);
   line-height: 1.8;
 }
 
@@ -505,7 +579,7 @@ button:focus-visible {
 
 .answer--loading {
   border-style: dashed;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.34), rgba(40, 94, 97, 0.08), rgba(255, 255, 255, 0.34));
+  background: var(--answer-loading);
   background-size: 200% 100%;
   animation: answer-loading 1.4s ease-in-out infinite;
 }
@@ -514,7 +588,7 @@ button:focus-visible {
   padding: 18px 20px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--surface-soft);
 }
 
 .outline__list {
@@ -527,13 +601,13 @@ button:focus-visible {
 
 .warning-box {
   margin-top: 20px;
-  border-color: rgba(192, 138, 62, 0.32);
-  background: rgba(192, 138, 62, 0.12);
-  color: #8a5a1f;
+  border-color: var(--warning-border);
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .error-box {
-  border-color: rgba(178, 84, 79, 0.22);
+  border-color: var(--error-border);
   background: var(--error-soft);
   color: var(--error);
 }
