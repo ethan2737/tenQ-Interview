@@ -49,5 +49,7 @@ test("workbench radii align with design system scale", () => {
 test("provider select uses a custom dropdown affordance", () => {
   assert.match(css, /\.toolbar__select-wrap::after\s*\{/);
   assert.match(css, /\.toolbar__select\s*\{[\s\S]*padding:\s*0 42px 0 14px/);
+  assert.match(css, /\.toolbar__select\s*\{[\s\S]*color-scheme:\s*light/);
   assert.match(css, /\.toolbar__select\s*\{[\s\S]*appearance:\s*none/);
+  assert.match(css, /\.toolbar__select option\s*\{[\s\S]*background:\s*#fbf8f2/);
 });

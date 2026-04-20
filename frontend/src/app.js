@@ -1,4 +1,5 @@
 ﻿const CONFIRMED_STORAGE_KEY = "tenq-interview.confirmed-preview-keys.v1";
+const { initTheme: initializeTheme } = window.TenQTheme;
 const {
   buildLibraryResult: buildImportLibraryResult,
   buildExportSelectionState,
@@ -50,6 +51,7 @@ const elements = {
   selectedExportCount: document.getElementById("selected-export-count"),
   batchExportButton: document.getElementById("batch-export-button"),
   providerSelect: document.getElementById("provider-select"),
+  themeToggleButton: document.getElementById("theme-toggle-button"),
   sidebarToggleButton: document.getElementById("sidebar-toggle-button"),
   heroPanel: document.getElementById("hero-panel"),
   summaryPanel: document.getElementById("summary-panel"),
@@ -1475,6 +1477,7 @@ function mockAudioGenerationStatus(overrides = {}) {
 }
 
 setupEvents();
+initializeTheme();
 render();
 beginAudioStatusPolling();
 void restoreAgentSettings().then(() => restoreImportedLibrary());
