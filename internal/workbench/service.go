@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"tenq-interview/internal/agent"
+	"tenq-interview/internal/audio"
 	"tenq-interview/internal/cache"
 	"tenq-interview/internal/importer"
 	"tenq-interview/internal/library"
@@ -74,6 +75,31 @@ type AgentSettings struct {
 	Options         []AgentOption `json:"options"`
 }
 
+type AudioGenerationResult struct {
+	OutputPath       string `json:"outputPath"`
+	TotalEntries     int    `json:"totalEntries"`
+	GeneratedEntries int    `json:"generatedEntries"`
+	SkippedEntries   int    `json:"skippedEntries"`
+	GeneratedAt      string `json:"generatedAt"`
+	Backend          string `json:"backend"`
+}
+
+type AudioGenerationStatus struct {
+	State            string `json:"state"`
+	Message          string `json:"message"`
+	Stage            string `json:"stage,omitempty"`
+	CurrentQuestion  string `json:"currentQuestion,omitempty"`
+	TotalEntries     int    `json:"totalEntries"`
+	CompletedEntries int    `json:"completedEntries"`
+	OutputPath       string `json:"outputPath,omitempty"`
+	StartedAt        string `json:"startedAt,omitempty"`
+	UpdatedAt        string `json:"updatedAt,omitempty"`
+	FinishedAt       string `json:"finishedAt,omitempty"`
+	Error            string `json:"error,omitempty"`
+	CanCancel        bool   `json:"canCancel"`
+	Backend          string `json:"backend,omitempty"`
+}
+
 type DocumentPreview struct {
 	Path             string `json:"path"`
 	Title            string `json:"title"`
@@ -91,6 +117,15 @@ type Service struct {
 	cachePath       string
 	defaultProvider string
 	summarizers     map[string]documentSummarizer
+	audioJobs       *audio.JobManager
+}
+
+type interviewAudioGenerator interface {
+	GenerateFromCache() (audio.Result, error)
+}
+
+var newInterviewAudioGenerator = func(config audio.GeneratorConfig) interviewAudioGenerator {
+	return audio.NewGenerator(config)
 }
 
 type documentSummarizer interface {
@@ -144,6 +179,7 @@ func newService(store *cache.Store, cachePath string) *Service {
 		store:        store,
 		cachePath:    cachePath,
 		summarizers:  map[string]documentSummarizer{},
+		audioJobs:    audio.NewJobManager(audio.GeneratorConfig{CachePath: cachePath}),
 	}
 }
 
@@ -473,6 +509,70 @@ func (s *Service) AgentSettings() AgentSettings {
 	return AgentSettings{
 		DefaultProvider: s.defaultProvider,
 		Options:         options,
+	}
+}
+
+func (s *Service) GenerateInterviewAudioFromCache() (AudioGenerationResult, error) {
+	if strings.TrimSpace(s.cachePath) == "" {
+		return AudioGenerationResult{}, errors.New("cache path is not configured")
+	}
+
+	result, err := newInterviewAudioGenerator(audio.GeneratorConfig{
+		CachePath: s.cachePath,
+	}).GenerateFromCache()
+	if err != nil {
+		return AudioGenerationResult{}, err
+	}
+
+	return AudioGenerationResult{
+		OutputPath:       result.OutputPath,
+		TotalEntries:     result.TotalEntries,
+		GeneratedEntries: result.GeneratedEntries,
+		SkippedEntries:   result.SkippedEntries,
+		GeneratedAt:      result.GeneratedAt,
+		Backend:          result.Backend,
+	}, nil
+}
+
+func (s *Service) StartInterviewAudioGenerationFromCache() (AudioGenerationStatus, error) {
+	if strings.TrimSpace(s.cachePath) == "" {
+		return AudioGenerationStatus{}, errors.New("cache path is not configured")
+	}
+
+	status, err := s.audioJobs.StartFromCache()
+	if err != nil {
+		return AudioGenerationStatus{}, err
+	}
+	return mapAudioGenerationStatus(status), nil
+}
+
+func (s *Service) AudioGenerationStatus() AudioGenerationStatus {
+	return mapAudioGenerationStatus(s.audioJobs.Status())
+}
+
+func (s *Service) CancelInterviewAudioGeneration() (AudioGenerationStatus, error) {
+	status, err := s.audioJobs.Cancel()
+	if err != nil {
+		return AudioGenerationStatus{}, err
+	}
+	return mapAudioGenerationStatus(status), nil
+}
+
+func mapAudioGenerationStatus(status audio.JobStatus) AudioGenerationStatus {
+	return AudioGenerationStatus{
+		State:            status.State,
+		Message:          status.Message,
+		Stage:            status.Stage,
+		CurrentQuestion:  status.CurrentQuestion,
+		TotalEntries:     status.TotalEntries,
+		CompletedEntries: status.CompletedEntries,
+		OutputPath:       status.OutputPath,
+		StartedAt:        status.StartedAt,
+		UpdatedAt:        status.UpdatedAt,
+		FinishedAt:       status.FinishedAt,
+		Error:            status.Error,
+		CanCancel:        status.CanCancel,
+		Backend:          status.Backend,
 	}
 }
 

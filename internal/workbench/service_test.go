@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"tenq-interview/internal/agent"
+	"tenq-interview/internal/audio"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
@@ -28,6 +29,15 @@ func (s stubSummarizer) Summarize(ctx context.Context, req agent.SummarizeReques
 
 func (s stubSummarizer) ProviderModel() string { return s.model }
 func (s stubSummarizer) PromptVersion() string { return s.version }
+
+type stubInterviewAudioGenerator struct {
+	result audio.Result
+	err    error
+}
+
+func (s stubInterviewAudioGenerator) GenerateFromCache() (audio.Result, error) {
+	return s.result, s.err
+}
 
 func TestImportPathBuildsDocumentSummaries(t *testing.T) {
 	t.Parallel()
@@ -673,5 +683,42 @@ func TestExportDocumentsMarkdownOmitsHiddenMetadataComments(t *testing.T) {
 	content := string(raw)
 	if strings.Contains(content, "TENQ_EXPORT_ENTRY") {
 		t.Fatalf("expected export to omit hidden metadata comments, got %q", content)
+	}
+}
+
+func TestGenerateInterviewAudioFromCacheReturnsGeneratorResult(t *testing.T) {
+	previousFactory := newInterviewAudioGenerator
+	t.Cleanup(func() {
+		newInterviewAudioGenerator = previousFactory
+	})
+
+	newInterviewAudioGenerator = func(config audio.GeneratorConfig) interviewAudioGenerator {
+		if !strings.HasSuffix(config.CachePath, filepath.Join(".cache", "tenq-interview", "index.json")) {
+			t.Fatalf("unexpected cache path: %q", config.CachePath)
+		}
+		return stubInterviewAudioGenerator{
+			result: audio.Result{
+				OutputPath:       filepath.Join("E:\\Project\\Agent\\TenQ-Interview", ".cache", "tenq-interview", "audio", "session.wav"),
+				TotalEntries:     3,
+				GeneratedEntries: 2,
+				SkippedEntries:   1,
+				GeneratedAt:      "2026-04-20T16:00:00+08:00",
+				Backend:          "onnx",
+			},
+		}
+	}
+
+	service, err := NewServiceWithCache(filepath.Join("E:\\Project\\Agent\\TenQ-Interview", ".cache", "tenq-interview", "index.json"))
+	if err != nil {
+		t.Fatalf("NewServiceWithCache returned error: %v", err)
+	}
+
+	result, err := service.GenerateInterviewAudioFromCache()
+	if err != nil {
+		t.Fatalf("GenerateInterviewAudioFromCache returned error: %v", err)
+	}
+
+	if result.OutputPath == "" || result.GeneratedEntries != 2 || result.Backend != "onnx" {
+		t.Fatalf("unexpected audio generation result: %+v", result)
 	}
 }

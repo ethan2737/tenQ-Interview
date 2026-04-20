@@ -7,16 +7,29 @@ import (
 )
 
 func TestDefaultCachePathUsesProjectDirectory(t *testing.T) {
-	workingDir, err := os.Getwd()
+	executablePath, err := os.Executable()
 	if err != nil {
-		t.Fatalf("Getwd returned error: %v", err)
+		t.Fatalf("Executable returned error: %v", err)
 	}
 
-	want := filepath.Join(workingDir, ".cache", "tenq-interview", "index.json")
+	want := filepath.Join(filepath.Dir(executablePath), ".cache", "tenq-interview", "index.json")
 	got := defaultCachePath()
 
 	if got != want {
 		t.Fatalf("expected cache path %q, got %q", want, got)
+	}
+}
+
+func TestDefaultCacheBaseDirUsesExecutableDirectory(t *testing.T) {
+	executablePath, err := os.Executable()
+	if err != nil {
+		t.Fatalf("Executable returned error: %v", err)
+	}
+
+	want := filepath.Dir(executablePath)
+	got := defaultCacheBaseDir()
+	if got != want {
+		t.Fatalf("expected cache base dir %q, got %q", want, got)
 	}
 }
 
