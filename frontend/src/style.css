@@ -275,6 +275,16 @@ button:focus-visible {
   opacity: 0.6;
 }
 
+.toolbar__meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .panel {
   border: 1px solid var(--border);
   border-radius: 14px;

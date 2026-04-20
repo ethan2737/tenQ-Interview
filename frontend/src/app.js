@@ -13,6 +13,21 @@ const { renderMarkdownToHtml } = window.TenQMarkdownRender;
 const state = {
   agentSettings: { defaultProvider: "deepseek", options: [] },
   busy: false,
+  audioGeneration: {
+    state: "idle",
+    message: "",
+    stage: "",
+    currentQuestion: "",
+    totalEntries: 0,
+    completedEntries: 0,
+    outputPath: "",
+    startedAt: "",
+    updatedAt: "",
+    finishedAt: "",
+    error: "",
+    canCancel: false,
+    backend: "",
+  },
   libraryDocuments: [],
   processingPath: "",
   result: null,
@@ -66,8 +81,12 @@ const elements = {
   sourceToggle: document.getElementById("source-toggle"),
   importFileButton: document.getElementById("import-file-button"),
   importDirectoryButton: document.getElementById("import-directory-button"),
+  generateAudioButton: document.getElementById("generate-audio-button"),
   retryDocumentButton: document.getElementById("retry-document-button"),
+  audioGenerationStatus: document.getElementById("audio-generation-status"),
 };
+
+let audioStatusPoller = null;
 
 const api = {
   async selectFile() {
@@ -136,6 +155,37 @@ const api = {
     }
     return mockAgentSettings();
   },
+  async generateInterviewAudioFromCache() {
+    if (window.go?.main?.App?.GenerateInterviewAudioFromCache) {
+      return window.go.main.App.GenerateInterviewAudioFromCache();
+    }
+    return {
+      outputPath: ".cache/tenq-interview/audio/interview-session-20260420-103045.wav",
+      totalEntries: 3,
+      generatedEntries: 3,
+      skippedEntries: 0,
+      generatedAt: "2026-04-20T10:30:45+08:00",
+      backend: "onnx",
+    };
+  },
+  async startInterviewAudioGenerationFromCache() {
+    if (window.go?.main?.App?.StartInterviewAudioGenerationFromCache) {
+      return window.go.main.App.StartInterviewAudioGenerationFromCache();
+    }
+    return mockAudioGenerationStatus({ state: "running", canCancel: true, totalEntries: 3 });
+  },
+  async audioGenerationStatus() {
+    if (window.go?.main?.App?.AudioGenerationStatus) {
+      return window.go.main.App.AudioGenerationStatus();
+    }
+    return mockAudioGenerationStatus();
+  },
+  async cancelInterviewAudioGeneration() {
+    if (window.go?.main?.App?.CancelInterviewAudioGeneration) {
+      return window.go.main.App.CancelInterviewAudioGeneration();
+    }
+    return mockAudioGenerationStatus({ state: "cancelled", canCancel: false, message: "音频生成已取消" });
+  },
 };
 
 function setupEvents() {
@@ -149,6 +199,9 @@ function setupEvents() {
   });
   elements.importFileButton.addEventListener("click", () => startPreview("file"));
   elements.importDirectoryButton.addEventListener("click", () => startPreview("directory"));
+  elements.generateAudioButton.addEventListener("click", () => {
+    void generateInterviewAudio();
+  });
   elements.confirmImportButton.addEventListener("click", () => runImportQueue());
   elements.cancelImportButton.addEventListener("click", () => {
     void resetImport();
@@ -418,6 +471,33 @@ async function exportSelectedDocuments() {
   }
 }
 
+async function generateInterviewAudio() {
+  if (state.busy) {
+    return;
+  }
+
+  if (state.audioGeneration.canCancel) {
+    try {
+      state.audioGeneration = normalizeAudioGenerationStatus(await api.cancelInterviewAudioGeneration());
+      render();
+    } catch (error) {
+      state.error = error?.message || String(error);
+      render();
+    }
+    return;
+  }
+
+  state.error = "";
+  try {
+    state.audioGeneration = normalizeAudioGenerationStatus(await api.startInterviewAudioGenerationFromCache());
+    beginAudioStatusPolling();
+  } catch (error) {
+    state.error = error?.message || String(error);
+  } finally {
+    render();
+  }
+}
+
 function toggleConfirmSelectedDocument() {
   const selected = getSelectedDocument();
   if (!selected) {
@@ -516,6 +596,24 @@ function normalizeResult(result) {
   };
 }
 
+function normalizeAudioGenerationStatus(status = {}) {
+  return {
+    state: status.state || "idle",
+    message: status.message || "",
+    stage: status.stage || "",
+    currentQuestion: status.currentQuestion || "",
+    totalEntries: Number(status.totalEntries || 0),
+    completedEntries: Number(status.completedEntries || 0),
+    outputPath: status.outputPath || "",
+    startedAt: status.startedAt || "",
+    updatedAt: status.updatedAt || "",
+    finishedAt: status.finishedAt || "",
+    error: status.error || "",
+    canCancel: Boolean(status.canCancel),
+    backend: status.backend || "",
+  };
+}
+
 function commitImportedBatch() {
   if (!state.result) {
     return;
@@ -574,6 +672,7 @@ function render() {
   const mobileSidebarActive = state.mobileSidebarOpen && window.innerWidth <= 1100;
 
   renderProviderOptions();
+  renderAudioGenerationStatus();
   elements.sidebarStatus.textContent = buildSidebarStatus();
   document.body.classList.toggle("sidebar-open", mobileSidebarActive);
   elements.sidebarToggleButton.classList.toggle("hidden", window.innerWidth > 1100);
@@ -907,7 +1006,13 @@ function confirmButtonText() {
 
 function buildSidebarStatus() {
   if (state.error) {
-    return `导入失败：${state.error}`;
+    return `操作失败：${state.error}`;
+  }
+  if (state.audioGeneration.state === "running" || state.audioGeneration.state === "preparing") {
+    return audioGenerationMessage(state.audioGeneration);
+  }
+  if (state.audioGeneration.state === "cancelling") {
+    return "正在取消音频生成...";
   }
   if (state.phase === "preview" && state.result) {
     return `预览 ${state.result.total} 篇文档，可导入 ${importablePreviewCount()} 篇`;
@@ -926,6 +1031,66 @@ function buildSidebarStatus() {
     return "尚未导入资料";
   }
   return `已导入 ${state.result.total} 篇，可用 ${state.result.ready} 篇，失败 ${state.result.failed} 篇`;
+}
+
+function renderAudioGenerationStatus() {
+  const status = state.audioGeneration;
+  const active =
+    status.state === "preparing" ||
+    status.state === "running" ||
+    status.state === "cancelling" ||
+    status.state === "completed" ||
+    status.state === "cancelled" ||
+    status.state === "failed";
+
+  elements.audioGenerationStatus.classList.toggle("hidden", !active);
+  elements.audioGenerationStatus.textContent = active ? audioGenerationMessage(status) : "";
+
+  if (status.canCancel) {
+    elements.generateAudioButton.textContent = "取消生成";
+    return;
+  }
+
+  if (status.state === "preparing" || status.state === "running" || status.state === "cancelling") {
+    elements.generateAudioButton.textContent = "处理中...";
+    return;
+  }
+
+  elements.generateAudioButton.textContent = "生成音频";
+}
+
+function audioGenerationMessage(status) {
+  if (!status) {
+    return "";
+  }
+
+  if (status.state === "running") {
+    const progress = status.totalEntries > 0 ? `${status.completedEntries}/${status.totalEntries}` : "";
+    if (status.currentQuestion) {
+      return `音频生成中 ${progress} · ${status.currentQuestion}`;
+    }
+    if (status.message) {
+      return status.message;
+    }
+    return progress ? `音频生成中 ${progress}` : "音频生成中";
+  }
+
+  if (status.state === "preparing") {
+    return status.message || "正在准备音频生成环境";
+  }
+  if (status.state === "cancelling") {
+    return status.message || "正在取消音频生成";
+  }
+  if (status.state === "completed") {
+    return status.totalEntries > 0 ? `已完成 ${status.completedEntries}/${status.totalEntries}` : "音频生成完成";
+  }
+  if (status.state === "cancelled") {
+    return "音频生成已取消";
+  }
+  if (status.state === "failed") {
+    return status.error ? `生成失败：${status.error}` : "音频生成失败";
+  }
+  return "";
 }
 
 function buildMeta(selected) {
@@ -1058,6 +1223,8 @@ function toggleBusyState(isBusy) {
     button.disabled = isBusy;
   });
 
+  elements.generateAudioButton.disabled = isBusy || state.audioGeneration.state === "cancelling";
+
   elements.confirmImportButton.disabled = isBusy || (state.phase === "preview" && importablePreviewCount() === 0);
   elements.cancelImportButton.disabled = state.phase === "processing";
 }
@@ -1096,6 +1263,72 @@ function syncResponsiveState() {
     state.mobileSidebarOpen = false;
   }
   render();
+}
+
+function beginAudioStatusPolling() {
+  if (audioStatusPoller) {
+    window.clearInterval(audioStatusPoller);
+  }
+
+  const refresh = async () => {
+    try {
+      const previousState = state.audioGeneration.state;
+      state.audioGeneration = normalizeAudioGenerationStatus(await api.audioGenerationStatus());
+      maybeNotifyAudioTerminalState(previousState, state.audioGeneration);
+      render();
+
+      if (!state.audioGeneration.canCancel && !isAudioStatusActive(state.audioGeneration.state)) {
+        stopAudioStatusPolling();
+      }
+      if (!state.audioGeneration.canCancel && isAudioStatusTerminal(state.audioGeneration.state)) {
+        stopAudioStatusPolling();
+      }
+    } catch (error) {
+      state.error = error?.message || String(error);
+      stopAudioStatusPolling();
+      render();
+    }
+  };
+
+  audioStatusPoller = window.setInterval(() => {
+    void refresh();
+  }, 1000);
+  void refresh();
+}
+
+function stopAudioStatusPolling() {
+  if (audioStatusPoller) {
+    window.clearInterval(audioStatusPoller);
+    audioStatusPoller = null;
+  }
+}
+
+function isAudioStatusActive(status) {
+  return status === "preparing" || status === "running" || status === "cancelling";
+}
+
+function isAudioStatusTerminal(status) {
+  return status === "completed" || status === "cancelled" || status === "failed";
+}
+
+function maybeNotifyAudioTerminalState(previousState, nextStatus) {
+  if (!isAudioStatusTerminal(nextStatus.state) || previousState === nextStatus.state) {
+    return;
+  }
+
+  if (nextStatus.state === "completed" && nextStatus.outputPath) {
+    window.alert(`已生成音频：${nextStatus.outputPath}`);
+    return;
+  }
+
+  if (nextStatus.state === "failed") {
+    state.error = nextStatus.error || nextStatus.message || "音频生成失败";
+    return;
+  }
+
+  if (nextStatus.state === "cancelled") {
+    window.alert("已取消音频生成");
+  }
 }
 
 function mockPrepareResult(target) {
@@ -1222,6 +1455,26 @@ function mockAgentSettings() {
   });
 }
 
+function mockAudioGenerationStatus(overrides = {}) {
+  return Promise.resolve({
+    state: "idle",
+    message: "",
+    stage: "",
+    currentQuestion: "",
+    totalEntries: 0,
+    completedEntries: 0,
+    outputPath: "",
+    startedAt: "",
+    updatedAt: "",
+    finishedAt: "",
+    error: "",
+    canCancel: false,
+    backend: "onnx",
+    ...overrides,
+  });
+}
+
 setupEvents();
 render();
+beginAudioStatusPolling();
 void restoreAgentSettings().then(() => restoreImportedLibrary());
